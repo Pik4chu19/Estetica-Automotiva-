@@ -4,7 +4,14 @@ from PIL import Image
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import Image as RLImage, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    Image as RLImage,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 import streamlit as st
 
 st.set_page_config(page_title="Estética Automotiva - Gestão", page_icon="🚗")
@@ -14,10 +21,18 @@ st.title("🚗 Controle de Serviços - Estética Automotiva")
 # --- DADOS DO ESTABELECIMENTO E VEÍCULO ---
 st.subheader("📋 Dados Gerais")
 
-nome_estabelecimento = st.text_input(
-    "Nome do Estabelecimento:",
-    placeholder="Digite o nome da sua estética automotiva",
-)
+col_emp1, col_emp2 = st.columns([2, 1])
+with col_emp1:
+    nome_estabelecimento = st.text_input(
+        "Nome do Estabelecimento:",
+        placeholder="Digite o nome da sua estética automotiva",
+    )
+with col_emp2:
+    logo_empresa = st.file_uploader(
+        "Logo da Empresa (para o PDF):",
+        type=["png", "jpg", "jpeg"],
+        key="logo",
+    )
 
 col1, col2 = st.columns(2)
 with col1:
@@ -32,8 +47,8 @@ telefone = st.text_input(
 )
 
 # --- CAMPO DE OBSERVAÇÕES / VISTORIA ---
-observacoes = st.text_area(
-    "📝 Observações da Vistoria (Avarias, detalhes de pintura, solicitações especiais):",
+observacoes_vistoria = st.text_area(
+    "📝 Observações da Vistoria (Avarias, detalhes de pintura, etc.):",
     placeholder="Ex: Risco no pára-choque dianteiro lado direito, banco de couro com pequena mancha.",
 )
 
@@ -56,6 +71,13 @@ if fotos_vistoria:
                 caption=f"Vistoria {index + 1}",
                 use_container_width=True,
             )
+
+# --- SERVIÇOS CONTRATADOS ---
+st.subheader("🛠️ Serviços Acertados com o Cliente")
+servicos_acertados = st.text_area(
+    "Descreva os serviços a serem executados:",
+    placeholder="Ex: Lavagem detalhada, Higienização interna, Vitrificação de pintura.",
+)
 
 st.divider()
 
@@ -96,11 +118,30 @@ for idx, etapa in enumerate(etapas):
                 st.session_state.etapa_atual += 1
                 st.rerun()
 
-# --- FOTOS APÓS FINALIZAÇÃO ---
+# --- CAMPOS APÓS FINALIZAÇÃO (ÚLTIMA ETAPA) ---
+observacoes_finais = ""
+valor_final = 0.0
 fotos_finalizacao = []
+
 if st.session_state.etapa_atual == len(etapas):
     st.divider()
-    st.subheader("✨ Fotos do Veículo Finalizado (Entrega)")
+    st.subheader("✨ Finalização e Entrega")
+
+    col_v1, col_v2 = st.columns(2)
+    with col_v1:
+        valor_final = st.number_input(
+            "💰 Valor Total dos Serviços (R$):",
+            min_value=0.0,
+            format="%.2f",
+            step=10.0,
+        )
+    with col_v2:
+        observacoes_finais = st.text_area(
+            "📝 Observações Finais / Recomendações:",
+            placeholder="Ex: Não lavar o veículo pelas próximas 48h devido à cura do vitrificador.",
+        )
+
+    st.subheader("📸 Fotos do Veículo Finalizado")
     fotos_finalizacao = st.file_uploader(
         "Anexe as fotos do veículo pronto/entregue:",
         type=["png", "jpg", "jpeg"],
@@ -132,9 +173,18 @@ if telefone and modelo:
         else "Cadastro Inicial"
     )
 
-    texto_obs = ""
-    if etapa_nome == "Vistoria Concluída" and observacoes:
-        texto_obs = f"\n\n📌 *Dados da Vistoria:* {observacoes}"
+    texto_detalhes = ""
+    if etapa_nome == "Vistoria Concluída":
+        if observacoes_vistoria:
+            texto_detalhes += f"\n\n📌 *Vistoria:* {observacoes_vistoria}"
+        if servicos_acertados:
+            texto_detalhes += f"\n🛠️ *Serviços Acertados:* {servicos_acertados}"
+
+    elif st.session_state.etapa_atual == len(etapas):
+        if observacoes_finais:
+            texto_detalhes += f"\n\n📝 *Observações Finais:* {observacoes_finais}"
+        if valor_final > 0:
+            texto_detalhes += f"\n💰 *Valor Total:* R$ {valor_final:.2f}"
 
     cabecalho_empresa = (
         f"*{nome_estabelecimento}*\n" if nome_estabelecimento else ""
@@ -144,7 +194,7 @@ if telefone and modelo:
         f"{cabecalho_empresa}"
         f"Olá {proprietario}! 👋\n\n"
         f"Atualização sobre o seu veículo *{modelo}* ({cor} - {ano}):\n"
-        f"Status: *{etapa_nome}*{texto_obs}\n\n"
+        f"Status: *{etapa_nome}*{texto_detalhes}\n\n"
         f"Qualquer dúvida, estamos à disposição!"
     )
 
@@ -158,22 +208,27 @@ if telefone and modelo:
         unsafe_allow_html=True,
     )
 
+
 # --- GERADOR DE PDF ---
 def gerar_pdf():
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
-        buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
+        buffer,
+        pagesize=letter,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36,
     )
     story = []
     styles = getSampleStyleSheet()
 
-    # Estilos
     title_style = ParagraphStyle(
         "TitleStyle",
         parent=styles["Heading1"],
         fontSize=18,
         leading=22,
-        alignment=1,
+        alignment=0,
         textColor=colors.HexColor("#1A365D"),
     )
     subtitle_style = ParagraphStyle(
@@ -187,93 +242,58 @@ def gerar_pdf():
     )
     body_style = styles["BodyText"]
 
-    # Cabeçalho
-    empresa_txt = nome_estabelecimento if nome_estabelecimento else "Estética Automotiva"
-    story.append(Paragraph(f"<b>{empresa_txt}</b>", title_style))
-    story.append(Paragraph("Relatório de Serviço e Vistoria", ParagraphStyle("Sub", parent=title_style, fontSize=12, textColor=colors.gray)))
-    story.append(Spacer(1, 15))
-
-    # Tabela de Dados Gerais
-    dados_veiculo = [
-        [Paragraph("<b>Proprietário:</b>", body_style), Paragraph(proprietario or "-", body_style), Paragraph("<b>Telefone:</b>", body_style), Paragraph(telefone or "-", body_style)],
-        [Paragraph("<b>Modelo:</b>", body_style), Paragraph(modelo or "-", body_style), Paragraph("<b>Cor / Ano:</b>", body_style), Paragraph(f"{cor or '-'} / {ano or '-'}", body_style)],
-    ]
-    tabela = Table(dados_veiculo, colWidths=[100, 170, 90, 180])
-    tabela.setStyle(
-        TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F7FAFC")),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-            ("PADDING", (0, 0), (-1, -1), 6),
-        ])
+    empresa_txt = (
+        nome_estabelecimento
+        if nome_estabelecimento
+        else "Estética Automotiva"
     )
-    story.append(tabela)
-    story.append(Spacer(1, 15))
 
-    # Observações
-    if observacoes:
-        story.append(Paragraph("Observações da Vistoria", subtitle_style))
-        story.append(Paragraph(observacoes, body_style))
-        story.append(Spacer(1, 10))
+    # Montagem do Cabeçalho com Logo e Título
+    header_content = []
+    header_text = [
+        Paragraph(f"<b>{empresa_txt}</b>", title_style),
+        Paragraph(
+            "Relatório de Serviço e Vistoria",
+            ParagraphStyle(
+                "Sub",
+                parent=title_style,
+                fontSize=11,
+                textColor=colors.gray,
+            ),
+        ),
+    ]
 
-    # Função auxiliar para processar e redimensionar imagens no PDF
-    def adicionar_fotos_ao_pdf(lista_arquivos, titulo_secao):
-        if not lista_arquivos:
-            return
-        story.append(Paragraph(titulo_secao, subtitle_style))
-        imgs_row = []
-        tabela_fotos = []
-        for file in lista_arquivos:
-            img = Image.open(file)
-            img_io = io.BytesIO()
-            img.convert("RGB").save(img_io, format="JPEG", quality=75)
-            img_io.seek(0)
-            rl_img = RLImage(img_io, width=160, height=120)
-            imgs_row.append(rl_img)
-
-            if len(imgs_row) == 3:
-                tabela_fotos.append(imgs_row)
-                imgs_row = []
-        if imgs_row:
-            while len(imgs_row) < 3:
-                imgs_row.append("")
-            tabela_fotos.append(imgs_row)
-
-        t_fotos = Table(tabela_fotos, colWidths=[180, 180, 180])
-        t_fotos.setStyle(
+    if logo_empresa:
+        img_logo = Image.open(logo_empresa)
+        img_io_logo = io.BytesIO()
+        img_logo.convert("RGB").save(img_io_logo, format="JPEG", quality=85)
+        img_io_logo.seek(0)
+        rl_logo = RLImage(img_io_logo, width=100, height=60)
+        
+        # Tabela alinhando Logo à esquerda e Título à direita
+        tabela_header = Table(
+            [[rl_logo, header_text]],
+            colWidths=[110, 430],
+        )
+        tabela_header.setStyle(
             TableStyle([
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("PADDING", (0, 0), (-1, -1), 4),
+                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("ALIGN", (1, 0), (1, 0), "LEFT"),
             ])
         )
-        story.append(t_fotos)
-        story.append(Spacer(1, 10))
+        story.append(tabela_header)
+    else:
+        story.append(header_text[0])
+        story.append(header_text[1])
 
-    # Adiciona fotos no PDF
-    adicionar_fotos_ao_pdf(fotos_vistoria, "Fotos da Vistoria Inicial")
-    adicionar_fotos_ao_pdf(fotos_finalizacao, "Fotos do Veículo Finalizado")
+    story.append(Spacer(1, 15))
 
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
-
-
-st.divider()
-
-# Botão de Download do PDF
-st.subheader("📄 Relatório do Serviço")
-if st.button("📊 Gerar Relatório em PDF"):
-    pdf_bytes = gerar_pdf()
-    nome_arquivo = f"relatorio_{modelo or 'veiculo'}.pdf"
-    st.download_button(
-        label="📥 Baixar PDF",
-        data=pdf_bytes,
-        file_name=nome_arquivo,
-        mime="application/pdf",
-    )
-
-# Botão para limpar e iniciar novo veículo
-st.divider()
-if st.button("🔄 Iniciar Novo Veículo"):
-    st.session_state.etapa_atual = 0
-    st.rerun()
+    dados_veiculo = [
+        [
+            Paragraph("<b>Proprietário:</b>", body_style),
+            Paragraph(proprietario or "-", body_style),
+            Paragraph("<b>Telefone:</b>", body_style),
+            Paragraph(telefone or "-", body_style),
+        ],
+       
