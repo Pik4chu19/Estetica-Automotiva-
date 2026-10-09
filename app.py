@@ -67,6 +67,13 @@ def init_db():
             FOREIGN KEY(cliente_id) REFERENCES clientes(id)
         )
     """)
+
+    # Garantir compatibilidade caso a tabela antiga exista sem a coluna cliente_id
+    cursor.execute("PRAGMA table_info(atendimentos)")
+    colunas = [col[1] for col in cursor.fetchall()]
+    if "cliente_id" not in colunas:
+        cursor.execute("ALTER TABLE atendimentos ADD COLUMN cliente_id INTEGER")
+
     conn.commit()
     conn.close()
 
@@ -133,7 +140,7 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
     conn.commit()
     conn.close()
 
-    # Agora cadastra o veículo vinculado a esse cliente
+    # Cadastra o veículo vinculado a esse cliente
     timestamp_pasta = datetime.now().strftime("%Y%m%d_%H%M%S")
     caminhos_vistoria = []
     if arquivos_vistoria:
@@ -358,7 +365,6 @@ elif opcao_menu == "🚗 Abrir Atendimento (Veículo Existente)":
     clientes = listar_clientes()
 
     if clientes:
-        # Selecionar Cliente
         cliente_opcoes = {f"{c[1]} (Tel: {c[2]})": c[0] for c in clientes}
         cliente_selecionado_nome = st.selectbox(
             "👤 Selecione o Cliente / Proprietário(a):",
@@ -366,7 +372,6 @@ elif opcao_menu == "🚗 Abrir Atendimento (Veículo Existente)":
         )
         cliente_id_sel = cliente_opcoes[cliente_selecionado_nome]
 
-        # Buscar veículos desse cliente
         veiculos_cliente = buscar_veiculos_cliente(cliente_id_sel)
 
         if veiculos_cliente:
@@ -380,7 +385,6 @@ elif opcao_menu == "🚗 Abrir Atendimento (Veículo Existente)":
             )
             atendimento_id_sel = veiculo_opcoes[veiculo_selecionado_str]
 
-            # Carregar dados do atendimento selecionado
             reg = carregar_atendimento_por_id(atendimento_id_sel)
             if reg:
                 (
