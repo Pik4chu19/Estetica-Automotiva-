@@ -32,7 +32,7 @@ def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Tabela de Clientes
+    # Criação das tabelas limpas para clientes e atendimentos/veículos
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS clientes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +41,6 @@ def init_db():
         )
     """)
 
-    # Tabela de Veículos / Atendimentos vinculados ao cliente
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS atendimentos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,13 +66,6 @@ def init_db():
             FOREIGN KEY(cliente_id) REFERENCES clientes(id)
         )
     """)
-
-    # Garantir compatibilidade caso a tabela antiga exista sem a coluna cliente_id
-    cursor.execute("PRAGMA table_info(atendimentos)")
-    colunas = [col[1] for col in cursor.fetchall()]
-    if "cliente_id" not in colunas:
-        cursor.execute("ALTER TABLE atendimentos ADD COLUMN cliente_id INTEGER")
-
     conn.commit()
     conn.close()
 
@@ -121,7 +113,7 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Verificar se o cliente já existe por telefone ou nome
+    # Verificar se o cliente já existe por nome ou telefone
     cursor.execute(
         "SELECT id FROM clientes WHERE nome = ? OR telefone = ?",
         (dados.get("proprietario"), dados.get("telefone")),
@@ -140,7 +132,7 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
     conn.commit()
     conn.close()
 
-    # Cadastra o veículo vinculado a esse cliente
+    # Cadastra o veículo vinculado ao cliente
     timestamp_pasta = datetime.now().strftime("%Y%m%d_%H%M%S")
     caminhos_vistoria = []
     if arquivos_vistoria:
