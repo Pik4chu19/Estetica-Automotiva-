@@ -29,10 +29,17 @@ if not os.path.exists(PASTA_FOTOS):
 
 
 def init_db():
+    # APAGA o banco antigo caso exista conflito de estrutura
+    if os.path.exists(DB_NAME):
+        try:
+            os.remove(DB_NAME)
+        except Exception:
+            pass
+
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Criação das tabelas limpas para clientes e atendimentos/veículos
+    # Criação das tabelas limpas
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS clientes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,7 +120,6 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Verificar se o cliente já existe por nome ou telefone
     cursor.execute(
         "SELECT id FROM clientes WHERE nome = ? OR telefone = ?",
         (dados.get("proprietario"), dados.get("telefone")),
@@ -132,7 +138,6 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
     conn.commit()
     conn.close()
 
-    # Cadastra o veículo vinculado ao cliente
     timestamp_pasta = datetime.now().strftime("%Y%m%d_%H%M%S")
     caminhos_vistoria = []
     if arquivos_vistoria:
