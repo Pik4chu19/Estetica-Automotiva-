@@ -4,7 +4,7 @@ import os
 import sqlite3
 import urllib.parse
 from datetime import datetime
-from PIL import Image as PILImage
+from PIL import Image
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -49,7 +49,6 @@ def init_db():
             endereco_empresa TEXT,
             telefone_empresa TEXT,
             responsavel_empresa TEXT,
-            logo_path TEXT,
             proprietario TEXT,
             telefone_cliente TEXT,
             veiculo TEXT,
@@ -109,7 +108,7 @@ def buscar_veiculos_cliente(cliente_id):
     return rows
 
 
-def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria, logo_file):
+def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
@@ -132,12 +131,6 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria, logo_file):
     conn.close()
 
     timestamp_pasta = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    # Salvar logo se houver
-    logo_path = ""
-    if logo_file:
-        logo_path = salvar_foto_disco(logo_file, f"{timestamp_pasta}_logo")
-
     caminhos_vistoria = []
     if arquivos_vistoria:
         for f in arquivos_vistoria:
@@ -150,10 +143,10 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria, logo_file):
     cursor.execute(
         """
         INSERT INTO atendimentos (
-            cliente_id, data_atendimento, nome_estabelecimento, endereco_empresa, telefone_empresa, responsavel_empresa, logo_path,
+            cliente_id, data_atendimento, nome_estabelecimento, endereco_empresa, telefone_empresa, responsavel_empresa,
             proprietario, telefone_cliente, veiculo, cor, ano, observacoes_vistoria,
             fotos_vistoria, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             cliente_id,
@@ -162,7 +155,6 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria, logo_file):
             dados.get("endereco_empresa", ""),
             dados.get("telefone_empresa", ""),
             dados.get("responsavel_empresa", ""),
-            logo_path,
             dados.get("proprietario", ""),
             dados.get("telefone", ""),
             dados.get("veiculo", ""),
@@ -262,7 +254,6 @@ def gerar_pdf_relatorio(reg):
         end_est,
         tel_est,
         resp_est,
-        logo_path,
         prop,
         tel_cli,
         veic,
@@ -300,14 +291,6 @@ def gerar_pdf_relatorio(reg):
         textColor=colors.HexColor("#1A365D"),
     )
 
-    sub_info_style = ParagraphStyle(
-        name="PDFSubInfo",
-        parent=title_style,
-        fontSize=9,
-        leading=13,
-        textColor=colors.HexColor("#4A5568"),
-    )
-
     subtitle_style = ParagraphStyle(
         name="PDFSubTitle",
         parent=styles["Heading2"],
@@ -318,49 +301,32 @@ def gerar_pdf_relatorio(reg):
         spaceAfter=5,
     )
 
-    # Organizar cabeçalho com Logo (se existir) ao lado dos dados da empresa
+    sub_info_style = ParagraphStyle(
+        name="PDFSubInfo",
+        parent=title_style,
+        fontSize=9,
+        leading=13,
+        textColor=colors.HexColor("#4A5568"),
+    )
+
     empresa_txt = nome_est if nome_est else "X-treme Parts"
-    texto_empresa_elements = [Paragraph(f"<b>{empresa_txt}</b>", title_style)]
+    header_paragraphs = [Paragraph(f"<b>{empresa_txt}</b>", title_style)]
 
     if end_est:
-        texto_empresa_elements.append(
+        header_paragraphs.append(
             Paragraph(f"<b>Endereço:</b> {end_est}", sub_info_style)
         )
     if tel_est:
-        texto_empresa_elements.append(
+        header_paragraphs.append(
             Paragraph(f"<b>Telefone:</b> {tel_est}", sub_info_style)
         )
     if resp_est:
-        texto_empresa_elements.append(
+        header_paragraphs.append(
             Paragraph(f"<b>Responsável:</b> {resp_est}", sub_info_style)
         )
 
-    header_table_data = []
-    logo_img = ""
-    if logo_path and os.path.exists(logo_path):
-        try:
-            img = PILImage.open(logo_path)
-            img_io = io.BytesIO()
-            img.convert("RGB").save(img_io, format="JPEG", quality=80)
-            img_io.seek(0)
-            logo_img = RLImage(img_io, width=70, height=70)
-        except Exception:
-            logo_img = ""
-
-    if logo_img:
-        header_table_data.append([logo_img, texto_empresa_elements])
-        t_header = Table(header_table_data, colWidths=[80, 460])
-        t_header.setStyle(
-            TableStyle([
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("ALIGN", (0, 0), (0, 0), "LEFT"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-            ])
-        )
-        story.append(t_header)
-    else:
-        for el in texto_empresa_elements:
-            story.append(el)
+    for p in header_paragraphs:
+        story.append(p)
 
     story.append(Spacer(1, 15))
 
@@ -439,11 +405,11 @@ def gerar_pdf_relatorio(reg):
         for p_foto in lista_paths:
             if os.path.exists(p_foto):
                 try:
-                    img = PILImage.open(p_foto)
+                    img = Image.open(p_foto)
                     img_io = io.BytesIO()
-                    img.convert("RGB").save(img_io, format="JPEG", quality=70)
+                    img.convert("RGB").save(img_io, format="JPEG", quality=75)
                     img_io.seek(0)
-                    rl_img = RLImage(img_io, width=150, height=110)
+                    rl_img = RLImage(img_io, width=160, height=120)
                     imgs_row.append(rl_img)
 
                     if len(imgs_row) == 3:
@@ -573,7 +539,7 @@ if opcao_menu == "📝 Novo Cadastro / Vistoria":
                 "observacoes_vistoria": observacoes_vistoria,
             }
             novo_id = cadastrar_cliente_e_veiculo(
-                dados_cadastro, fotos_vistoria, logo_empresa
+                dados_cadastro, fotos_vistoria
             )
             st.success(
                 f"✅ Cadastro realizado com sucesso! (ID do Atendimento: #{novo_id})"
@@ -623,7 +589,6 @@ elif opcao_menu == "🚗 Abrir Atendimento (Veículo Existente)":
                     end_est,
                     tel_est,
                     resp_est,
-                    logo_p,
                     prop,
                     tel_cli,
                     veic,
@@ -807,16 +772,13 @@ elif opcao_menu == "🚗 Abrir Atendimento (Veículo Existente)":
                         st.rerun()
 
                 with col_b2:
-                    try:
-                        pdf_file = gerar_pdf_relatorio(reg)
-                        st.download_button(
-                            label="📥 Baixar PDF para Enviar ao Cliente",
-                            data=pdf_file,
-                            file_name=f"relatorio_{veic or 'veiculo'}.pdf",
-                            mime="application/pdf",
-                        )
-                    except Exception as e:
-                        st.error(f"Erro ao gerar PDF: {e}")
+                    pdf_file = gerar_pdf_relatorio(reg)
+                    st.download_button(
+                        label="📥 Baixar PDF para Enviar ao Cliente",
+                        data=pdf_file,
+                        file_name=f"relatorio_{veic or 'veiculo'}.pdf",
+                        mime="application/pdf",
+                    )
         else:
             st.warning("Este cliente ainda não possui veículos cadastrados.")
     else:
@@ -849,7 +811,6 @@ elif opcao_menu == "📂 Histórico de Atendimento":
                 end_est,
                 tel_est,
                 resp_est,
-                logo_p,
                 prop,
                 tel_cli,
                 veic,
@@ -925,16 +886,13 @@ elif opcao_menu == "📂 Histórico de Atendimento":
                                 )
 
                 st.divider()
-                try:
-                    pdf_file_hist = gerar_pdf_relatorio(reg)
-                    st.download_button(
-                        label=f"📥 Baixar PDF deste Atendimento (#{reg_id})",
-                        data=pdf_file_hist,
-                        file_name=f"relatorio_atendimento_{reg_id}_{veic or 'veiculo'}.pdf",
-                        mime="application/pdf",
-                        key=f"dl_hist_{reg_id}",
-                    )
-                except Exception as e:
-                    st.error(f"Erro ao gerar PDF: {e}")
+                pdf_file_hist = gerar_pdf_relatorio(reg)
+                st.download_button(
+                    label=f"📥 Baixar PDF deste Atendimento (#{reg_id})",
+                    data=pdf_file_hist,
+                    file_name=f"relatorio_atendimento_{reg_id}_{veic or 'veiculo'}.pdf",
+                    mime="application/pdf",
+                    key=f"dl_hist_{reg_id}",
+                )
     else:
         st.info("Nenhum histórico de atendimento encontrado.")
