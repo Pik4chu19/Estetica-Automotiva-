@@ -1,4 +1,6 @@
 import io
+import json
+import os
 import urllib.parse
 from PIL import Image
 from reportlab.lib import colors
@@ -16,30 +18,36 @@ import streamlit as st
 
 st.set_page_config(page_title="Estética Automotiva - Gestão", page_icon="🚗")
 
+# --- ARQUIVO DE RECUPERAÇÃO AUTOMÁTICA ---
+ARQUIVO_RASCUNHO = "rascunho_atendimento.json"
+
+
+def salvar_rascunho(dados):
+    with open(ARQUIVO_RASCUNHO, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=4)
+
+
+def carregar_rascunho():
+    if os.path.exists(ARQUIVO_RASCUNHO):
+        try:
+            with open(ARQUIVO_RASCUNHO, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def limpar_rascunho():
+    if os.path.exists(ARQUIVO_RASCUNHO):
+        os.remove(ARQUIVO_RASCUNHO)
+
+
+dados_salvos = carregar_rascunho()
+
 st.title("🚗 Controle de Serviços - Estética Automotiva")
 
-# --- INICIALIZAÇÃO DE VARIÁVEIS ---
-# Garantindo que todas as variáveis existam mesmo se não forem preenchidas pelo usuário
-nome_estabelecimento = ""
-endereco_empresa = ""
-telefone_empresa = ""
-responsavel_empresa = ""
-logo_empresa = None
-
-veiculo = ""
-cor = ""
-ano = ""
-proprietario = ""
-telefone = ""
-
-observacoes_vistoria = ""
-servicos_acertados = ""
-fotos_vistoria = []
-
-observacoes_finais = ""
-valor_final = 0.0
-chave_pix = ""
-fotos_finalizacao = []
+if dados_salvos:
+    st.info("ℹ️ Dados do atendimento anterior recuperados automaticamente!")
 
 # --- DADOS DO ESTABELECIMENTO E VEÍCULO ---
 st.subheader("📋 Dados Gerais")
@@ -48,20 +56,24 @@ col_emp1, col_emp2 = st.columns([2, 1])
 with col_emp1:
     nome_estabelecimento = st.text_input(
         "Nome do Estabelecimento:",
+        value=dados_salvos.get("nome_estabelecimento", ""),
         placeholder="Digite o nome da sua estética automotiva",
     )
     endereco_empresa = st.text_input(
         "Endereço da Estética:",
+        value=dados_salvos.get("endereco_empresa", ""),
     )
     col_emp_sub1, col_emp_sub2 = st.columns(2)
     with col_emp_sub1:
         telefone_empresa = st.text_input(
             "Telefone da Estética:",
+            value=dados_salvos.get("telefone_empresa", ""),
             placeholder="Ex: (31) 99999-8888",
         )
     with col_emp_sub2:
         responsavel_empresa = st.text_input(
             "Responsável:",
+            value=dados_salvos.get("responsavel_empresa", ""),
             placeholder="Ex: Pikachu",
         )
 
@@ -76,19 +88,23 @@ st.divider()
 
 col1, col2 = st.columns(2)
 with col1:
-    veiculo = st.text_input("Veículo:")
-    cor = st.text_input("Cor:")
+    veiculo = st.text_input("Veículo:", value=dados_salvos.get("veiculo", ""))
+    cor = st.text_input("Cor:", value=dados_salvos.get("cor", ""))
 with col2:
-    ano = st.text_input("Ano:")
-    proprietario = st.text_input("Proprietário(a):")
+    ano = st.text_input("Ano:", value=dados_salvos.get("ano", ""))
+    proprietario = st.text_input(
+        "Proprietário(a):", value=dados_salvos.get("proprietario", "")
+    )
 
 telefone = st.text_input(
-    "Telefone do Cliente (DDD + Número, ex: 31999998888):"
+    "Telefone do Cliente (DDD + Número, ex: 31999998888):",
+    value=dados_salvos.get("telefone", ""),
 )
 
 # --- CAMPO DE OBSERVAÇÕES / VISTORIA ---
 observacoes_vistoria = st.text_area(
     "📝 Observações da Vistoria (Avarias, detalhes de pintura, etc.):",
+    value=dados_salvos.get("observacoes_vistoria", ""),
     placeholder="Ex: Risco no pára-choque dianteiro lado direito, banco de couro com pequena mancha.",
 )
 
@@ -116,8 +132,29 @@ if fotos_vistoria:
 st.subheader("🛠️ Serviços Acertados com o Cliente")
 servicos_acertados = st.text_area(
     "Descreva os serviços a serem executados:",
+    value=dados_salvos.get("servicos_acertados", ""),
     placeholder="Ex: Lavagem detalhada, Higienização interna, Vitrificação de pintura.",
 )
+
+# --- SALVAR ESTADO ATUAL NO JSON ---
+estado_atual = {
+    "nome_estabelecimento": nome_estabelecimento,
+    "endereco_empresa": endereco_empresa,
+    "telefone_empresa": telefone_empresa,
+    "responsavel_empresa": responsavel_empresa,
+    "veiculo": veiculo,
+    "cor": cor,
+    "ano": ano,
+    "proprietario": proprietario,
+    "telefone": telefone,
+    "observacoes_vistoria": observacoes_vistoria,
+    "servicos_acertados": servicos_acertados,
+    "etapa_atual": st.session_state.get(
+        "etapa_atual", dados_salvos.get("etapa_atual", 0)
+    ),
+}
+
+salvar_rascunho(estado_atual)
 
 st.divider()
 
@@ -133,7 +170,7 @@ etapas = [
 ]
 
 if "etapa_atual" not in st.session_state:
-    st.session_state.etapa_atual = 0
+    st.session_state.etapa_atual = dados_salvos.get("etapa_atual", 0)
 
 
 def gerar_link_whatsapp(num, texto):
@@ -156,9 +193,16 @@ for idx, etapa in enumerate(etapas):
         if idx == st.session_state.etapa_atual:
             if st.button(f"Concluir: {etapa}", key=idx):
                 st.session_state.etapa_atual += 1
+                estado_atual["etapa_atual"] = st.session_state.etapa_atual
+                salvar_rascunho(estado_atual)
                 st.rerun()
 
 # --- CAMPOS APÓS FINALIZAÇÃO (ÚLTIMA ETAPA) ---
+observacoes_finais = ""
+valor_final = 0.0
+chave_pix = ""
+fotos_finalizacao = []
+
 if st.session_state.etapa_atual == len(etapas):
     st.divider()
     st.subheader("✨ Finalização e Entrega")
@@ -168,19 +212,27 @@ if st.session_state.etapa_atual == len(etapas):
         valor_final = st.number_input(
             "💰 Valor Total dos Serviços (R$):",
             min_value=0.0,
+            value=float(dados_salvos.get("valor_final", 0.0)),
             format="%.2f",
             step=10.0,
         )
     with col_v2:
         chave_pix = st.text_input(
             "🔑 Chave Pix para Pagamento:",
+            value=dados_salvos.get("chave_pix", ""),
             placeholder="Ex: CPF, CNPJ, Telefone ou E-mail",
         )
     with col_v3:
         observacoes_finais = st.text_area(
             "📝 Observações Finais / Recomendações:",
+            value=dados_salvos.get("observacoes_finais", ""),
             placeholder="Ex: Não lavar o veículo pelas próximas 48h.",
         )
+
+    estado_atual["valor_final"] = valor_final
+    estado_atual["chave_pix"] = chave_pix
+    estado_atual["observacoes_finais"] = observacoes_finais
+    salvar_rascunho(estado_atual)
 
     st.subheader("📸 Fotos do Veículo Finalizado")
     fotos_finalizacao = st.file_uploader(
@@ -316,7 +368,9 @@ def gerar_pdf():
         )
     if responsavel_empresa:
         header_paragraphs.append(
-            Paragraph(f"<b>Responsável:</b> {responsavel_empresa}", sub_info_style)
+            Paragraph(
+                f"<b>Responsável:</b> {responsavel_empresa}", sub_info_style
+            )
         )
 
     if logo_empresa:
@@ -326,7 +380,9 @@ def gerar_pdf():
         img_io_logo.seek(0)
         rl_logo = RLImage(img_io_logo, width=110, height=70)
 
-        tabela_header = Table([[rl_logo, header_paragraphs]], colWidths=[120, 420])
+        tabela_header = Table(
+            [[rl_logo, header_paragraphs]], colWidths=[120, 420]
+        )
         tabela_header.setStyle(
             TableStyle([
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -461,4 +517,5 @@ if st.button("📊 Gerar Relatório em PDF"):
 st.divider()
 if st.button("🔄 Iniciar Novo Veículo"):
     st.session_state.etapa_atual = 0
+    limpar_rascunho()
     st.rerun()
