@@ -36,7 +36,7 @@ with col_emp2:
 
 col1, col2 = st.columns(2)
 with col1:
-    modelo = st.text_input("Modelo:")
+    veiculo = st.text_input("Veículo:")
     cor = st.text_input("Cor:")
 with col2:
     ano = st.text_input("Ano:")
@@ -163,7 +163,7 @@ if st.session_state.etapa_atual == len(etapas):
                 )
 
 # --- NOTIFICAÇÃO VIA WHATSAPP ---
-if telefone and modelo:
+if telefone and veiculo:
     st.divider()
     st.subheader("📲 Notificar Cliente")
 
@@ -193,7 +193,7 @@ if telefone and modelo:
     mensagem = (
         f"{cabecalho_empresa}"
         f"Olá {proprietario}! 👋\n\n"
-        f"Atualização sobre o seu veículo *{modelo}* ({cor} - {ano}):\n"
+        f"Atualização sobre o seu veículo *{veiculo}* ({cor} - {ano}):\n"
         f"Status: *{etapa_nome}*{texto_detalhes}\n\n"
         f"Qualquer dúvida, estamos à disposição!"
     )
@@ -248,52 +248,10 @@ def gerar_pdf():
         else "Estética Automotiva"
     )
 
-    # Montagem do Cabeçalho com Logo e Título
-    header_content = []
     header_text = [
         Paragraph(f"<b>{empresa_txt}</b>", title_style),
         Paragraph(
             "Relatório de Serviço e Vistoria",
             ParagraphStyle(
                 "Sub",
-                parent=title_style,
-                fontSize=11,
-                textColor=colors.gray,
-            ),
-        ),
-    ]
-
-    if logo_empresa:
-        img_logo = Image.open(logo_empresa)
-        img_io_logo = io.BytesIO()
-        img_logo.convert("RGB").save(img_io_logo, format="JPEG", quality=85)
-        img_io_logo.seek(0)
-        rl_logo = RLImage(img_io_logo, width=100, height=60)
-        
-        # Tabela alinhando Logo à esquerda e Título à direita
-        tabela_header = Table(
-            [[rl_logo, header_text]],
-            colWidths=[110, 430],
-        )
-        tabela_header.setStyle(
-            TableStyle([
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("ALIGN", (0, 0), (0, 0), "LEFT"),
-                ("ALIGN", (1, 0), (1, 0), "LEFT"),
-            ])
-        )
-        story.append(tabela_header)
-    else:
-        story.append(header_text[0])
-        story.append(header_text[1])
-
-    story.append(Spacer(1, 15))
-
-    dados_veiculo = [
-        [
-            Paragraph("<b>Proprietário:</b>", body_style),
-            Paragraph(proprietario or "-", body_style),
-            Paragraph("<b>Telefone:</b>", body_style),
-            Paragraph(telefone or "-", body_style),
-        ],
-       
+                parent=
