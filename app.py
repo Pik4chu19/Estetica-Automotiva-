@@ -90,8 +90,8 @@ if fotos_vistoria:
             )
 
 # --- SERVIÇOS CONTRATADOS ---
-st.subheader("🛠️ Serviços Acertados com o Cliente")
-servicos_acertados = st.text_area(
+st.subheader("🛠️ Serviços combinados com o Cliente")
+servicos_contratados = st.text_area(
     "Descreva os serviços a serem executados:",
     placeholder="Ex: Lavagem detalhada, Higienização interna, Vitrificação de pintura.",
 )
