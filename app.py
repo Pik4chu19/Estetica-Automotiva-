@@ -187,7 +187,6 @@ opcao_menu = st.sidebar.radio(
 if opcao_menu == "📝 Cadastro & Vistoria":
     st.title("🚗 Cadastro do Cliente & Vistoria Inicial")
 
-    # ETAPA 1: CADASTRO DO CLIENTE E VEÍCULO
     if "atendimento_id_atual" not in st.session_state:
         st.session_state.atendimento_id_atual = None
 
@@ -286,7 +285,6 @@ if opcao_menu == "📝 Cadastro & Vistoria":
             else:
                 st.error("⚠️ Preencha os campos obrigatórios (Veículo e Proprietário).")
 
-    # ETAPA 2: SERVIÇOS E ACOMPANHAMENTO DO ATENDIMENTO
     else:
         st.info(
             f"🚗 **Atendimento em Andamento - Registro #{st.session_state.atendimento_id_atual}**"
@@ -388,7 +386,6 @@ if opcao_menu == "📝 Cadastro & Vistoria":
                             use_container_width=True,
                         )
 
-        # NOTIFICAÇÃO VIA WHATSAPP
         if dados.get("telefone") and dados.get("veiculo"):
             st.divider()
             st.subheader("📲 Notificar Cliente via WhatsApp")
@@ -415,4 +412,157 @@ if opcao_menu == "📝 Cadastro & Vistoria":
                     texto_detalhes += (
                         f"\n\n📝 *Observações Finais:* {observacoes_finais}"
                     )
-                if valor
+                if valor_final > 0:
+                    texto_detalhes += f"\n💰 *Valor Total:* R$ {valor_final:.2f}"
+                if chave_pix:
+                    texto_detalhes += f"\n🔑 *Chave Pix:* {chave_pix}"
+
+                texto_detalhes += (
+                    "\n\n✨ *\"Cuidamos hoje do bem que um dia foi seu maior sonho, "
+                    "porque aquilo que conquistamos merece ser preservado nos mínimos detalhes.\"*"
+                )
+
+            cabecalho_empresa = (
+                f"*{dados.get('nome_estabelecimento')}*\n"
+                if dados.get("nome_estabelecimento")
+                else ""
+            )
+
+            mensagem = (
+                f"{cabecalho_empresa}"
+                f"Olá {dados.get('proprietario')}! 👋\n\n"
+                f"Atualização sobre o seu veículo *{dados.get('veiculo')}* ({dados.get('cor')} - {dados.get('ano')}):\n"
+                f"Status: *{etapa_nome}*{texto_detalhes}\n\n"
+                f"Qualquer dúvida, estamos à disposição!"
+            )
+
+            link_wa = gerar_link_whatsapp(dados.get("telefone"), mensagem)
+
+            st.markdown(
+                f'<a href="{link_wa}" target="_blank">'
+                f'<button style="background-color:#25D366; color:white; border:none; padding:12px 24px; border-radius:8px; cursor:pointer; font-weight:bold; font-size:16px;">'
+                f"Enviar Status via WhatsApp 🚀"
+                f"</button></a>",
+                unsafe_allow_html=True,
+            )
+
+        st.divider()
+        if st.button("💾 Concluir e Atualizar Atendimento"):
+            dados_atualizacao = {
+                "servicos_acertados": servicos_acertados,
+                "observacoes_finais": observacoes_finais,
+                "valor_final": valor_final,
+                "chave_pix": chave_pix,
+            }
+            atualizar_atendimento_db(
+                st.session_state.atendimento_id_atual,
+                dados_atualizacao,
+                fotos_finalizacao,
+            )
+            st.success("✅ Atendimento atualizado e salvo no histórico com sucesso!")
+
+        if st.button("🔄 Novo Atendimento (Limpar Tela)"):
+            st.session_state.atendimento_id_atual = None
+            st.session_state.dados_atual = None
+            st.session_state.etapa_atual = 0
+            st.rerun()
+
+# ==========================================
+# ABA 2: HISTÓRICO DE CLIENTES
+# ==========================================
+elif opcao_menu == "📂 Histórico de Clientes":
+    st.title("📂 Histórico de Atendimentos")
+
+    termo_busca = st.text_input(
+        "🔍 Buscar por Proprietário(a), Veículo ou Telefone:",
+        placeholder="Digite o nome ou modelo do carro...",
+    )
+
+    registros = buscar_atendimentos(termo_busca)
+
+    if registros:
+        st.write(f"**Total de registros encontrados:** {len(registros)}")
+
+        for reg in registros:
+            (
+                reg_id,
+                data_atend,
+                nome_est,
+                end_est,
+                tel_est,
+                resp_est,
+                prop,
+                tel_cli,
+                veic,
+                cor_v,
+                ano_v,
+                obs_vist,
+                serv_acert,
+                obs_fin,
+                val_fin,
+                pix,
+                f_vist_json,
+                f_fin_json,
+                status,
+            ) = reg
+
+            status_tag = "🟡 Em Aberto" if status == "Em Aberto" else "✅ Concluído"
+
+            with st.expander(
+                f"{status_tag} | 🚗 {veic or 'Veículo'} - {prop or 'Cliente'} ({data_atend})"
+            ):
+                col_h1, col_h2 = st.columns(2)
+                with col_h1:
+                    st.write(f"**Proprietário(a):** {prop or '-'}")
+                    st.write(f"**Telefone:** {tel_cli or '-'}")
+                    st.write(f"**Veículo:** {veic or '-'}")
+                    st.write(f"**Cor / Ano:** {cor_v or '-'} / {ano_v or '-'}")
+                with col_h2:
+                    st.write(f"**Valor Total:** R$ {val_fin if val_fin else 0.0:.2f}")
+                    st.write(f"**Chave Pix:** {pix or '-'}")
+                    st.write(f"**Responsável:** {resp_est or '-'}")
+
+                if serv_acert:
+                    st.write(f"**Serviços Executados:**\n{serv_acert}")
+                if obs_vist:
+                    st.write(f"**Observações de Vistoria:**\n{obs_vist}")
+                if obs_fin:
+                    st.write(f"**Observações Finais:**\n{obs_fin}")
+
+                # Fotos Vistoria
+                try:
+                    caminhos_vist = json.loads(f_vist_json) if f_vist_json else []
+                except Exception:
+                    caminhos_vist = []
+
+                if caminhos_vist:
+                    st.write("**📸 Fotos da Vistoria Inicial:**")
+                    cols_hv = st.columns(3)
+                    for idx_f, p_foto in enumerate(caminhos_vist):
+                        if os.path.exists(p_foto):
+                            with cols_hv[idx_f % 3]:
+                                st.image(
+                                    p_foto,
+                                    caption=f"Vistoria {idx_f + 1}",
+                                    use_container_width=True,
+                                )
+
+                # Fotos Finalização
+                try:
+                    caminhos_fin = json.loads(f_fin_json) if f_fin_json else []
+                except Exception:
+                    caminhos_fin = []
+
+                if caminhos_fin:
+                    st.write("**📸 Fotos do Veículo Finalizado:**")
+                    cols_hf = st.columns(3)
+                    for idx_f, p_foto in enumerate(caminhos_fin):
+                        if os.path.exists(p_foto):
+                            with cols_hf[idx_f % 3]:
+                                st.image(
+                                    p_foto,
+                                    caption=f"Finalizado {idx_f + 1}",
+                                    use_container_width=True,
+                                )
+    else:
+        st.info("Nenhum histórico de atendimento encontrado.")
