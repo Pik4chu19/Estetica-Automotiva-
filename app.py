@@ -27,6 +27,22 @@ with col_emp1:
         "Nome do Estabelecimento:",
         placeholder="Digite o nome da sua estética automotiva",
     )
+    endereco_empresa = st.text_input(
+        "Endereço da Estética:",
+        placeholder="Ex: Rua Papa Leão I, 35 - Ouro Minas",
+    )
+    col_emp_sub1, col_emp_sub2 = st.columns(2)
+    with col_emp_sub1:
+        telefone_empresa = st.text_input(
+            "Telefone da Estética:",
+            placeholder="Ex: (31) 99999-8888",
+        )
+    with col_emp_sub2:
+        responsavel_empresa = st.text_input(
+            "Responsável:",
+            placeholder="Ex: Pikachu",
+        )
+
 with col_emp2:
     logo_empresa = st.file_uploader(
         "Logo da Empresa (para o PDF):",
@@ -34,13 +50,15 @@ with col_emp2:
         key="logo",
     )
 
+st.divider()
+
 col1, col2 = st.columns(2)
 with col1:
     veiculo = st.text_input("Veículo:")
     cor = st.text_input("Cor:")
 with col2:
     ano = st.text_input("Ano:")
-    proprietario = st.text_input("Proprietário:")
+    proprietario = st.text_input("Proprietário(a):")
 
 telefone = st.text_input(
     "Telefone do Cliente (DDD + Número, ex: 31999998888):"
@@ -241,8 +259,8 @@ def gerar_pdf():
     title_style = ParagraphStyle(
         name="PDFTitle",
         parent=styles["Heading1"],
-        fontSize=18,
-        leading=22,
+        fontSize=16,
+        leading=20,
         alignment=0,
         textColor=colors.HexColor("#1A365D"),
     )
@@ -260,44 +278,56 @@ def gerar_pdf():
     sub_info_style = ParagraphStyle(
         name="PDFSubInfo",
         parent=title_style,
-        fontSize=11,
-        textColor=colors.gray,
+        fontSize=9,
+        leading=13,
+        textColor=colors.HexColor("#4A5568"),
     )
 
     empresa_txt = (
         nome_estabelecimento if nome_estabelecimento else "Estética Automotiva"
     )
 
-    header_text = [
-        Paragraph(f"<b>{empresa_txt}</b>", title_style),
-        Paragraph("Relatório de Serviço e Vistoria", sub_info_style),
-    ]
+    header_paragraphs = [Paragraph(f"<b>{empresa_txt}</b>", title_style)]
+
+    if endereco_empresa:
+        header_paragraphs.append(
+            Paragraph(f"<b>Endereço:</b> {endereco_empresa}", sub_info_style)
+        )
+    if telefone_empresa:
+        header_paragraphs.append(
+            Paragraph(f"<b>Telefone:</b> {telefone_empresa}", sub_info_style)
+        )
+    if responsavel_empresa:
+        header_paragraphs.append(
+            Paragraph(f"<b>Responsável:</b> {responsavel_empresa}", sub_info_style)
+        )
 
     if logo_empresa:
         img_logo = Image.open(logo_empresa)
         img_io_logo = io.BytesIO()
         img_logo.convert("RGB").save(img_io_logo, format="JPEG", quality=85)
         img_io_logo.seek(0)
-        rl_logo = RLImage(img_io_logo, width=100, height=60)
+        rl_logo = RLImage(img_io_logo, width=110, height=70)
 
-        tabela_header = Table([[rl_logo, header_text]], colWidths=[110, 430])
+        tabela_header = Table([[rl_logo, header_paragraphs]], colWidths=[120, 420])
         tabela_header.setStyle(
             TableStyle([
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("ALIGN", (0, 0), (0, 0), "LEFT"),
                 ("ALIGN", (1, 0), (1, 0), "LEFT"),
+                ("PADDING", (0, 0), (-1, -1), 0),
             ])
         )
         story.append(tabela_header)
     else:
-        story.append(header_text[0])
-        story.append(header_text[1])
+        for p in header_paragraphs:
+            story.append(p)
 
     story.append(Spacer(1, 15))
 
     dados_veiculo = [
         [
-            Paragraph("<b>Proprietário:</b>", body_style),
+            Paragraph("<b>Proprietário(a):</b>", body_style),
             Paragraph(proprietario or "-", body_style),
             Paragraph("<b>Telefone:</b>", body_style),
             Paragraph(telefone or "-", body_style),
