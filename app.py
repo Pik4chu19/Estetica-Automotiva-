@@ -5,8 +5,13 @@ st.set_page_config(page_title="Estética Automotiva - Gestão", page_icon="🚗"
 
 st.title("🚗 Controle de Serviços - Estética Automotiva")
 
-# --- DADOS DO VEÍCULO ---
-st.subheader("📋 Dados do Veículo")
+# --- DADOS DO ESTABELECIMENTO E VEÍCULO ---
+st.subheader("📋 Dados Gerais")
+
+nome_estabelecimento = st.text_input(
+    "Nome do Estabelecimento:",
+    placeholder="Digite o nome da sua estética automotiva",
+)
 
 col1, col2 = st.columns(2)
 with col1:
@@ -20,9 +25,9 @@ telefone = st.text_input(
     "Telefone do Cliente (DDD + Número, ex: 31999998888):"
 )
 
-# --- CAMPO DE OBSERVAÇÕES ---
+# --- CAMPO DE OBSERVAÇÕES / VISTORIA ---
 observacoes = st.text_area(
-    "📝 Observações (Avarias, detalhes de pintura, solicitações especiais):",
+    "📝 Observações da Vistoria (Avarias, detalhes de pintura, solicitações especiais):",
     placeholder="Ex: Risco no pára-choque dianteiro lado direito, banco de couro com pequena mancha.",
 )
 
@@ -52,12 +57,10 @@ st.subheader("⚙️ Acompanhamento do Processo")
 
 etapas = [
     "Vistoria Concluída",
-    "Início da Lavagem Externa",
-    "Fim da Lavagem Externa",
-    "Início da Limpeza Interna",
-    "Fim da Limpeza Interna",
-    "Aplicação de Cerâmica / Proteção",
-    "Fase de Finalização / Pronto para Retirada",
+    "🚿 Já iniciamos a lavagem e limpeza do seu veículo.",
+    "🌬 Lavagem finalizada, estamos no processo de secagem e aplicação de acabamentos solicitados.",
+    "🌟 Processo final de serviços, em poucos minutos estará pronto.",
+    "🫡 Prontinho, seu veículo está pronto para ser retirado, estamos te aguardando.",
 ]
 
 if "etapa_atual" not in st.session_state:
@@ -97,12 +100,21 @@ if telefone and modelo:
         else "Cadastro Inicial"
     )
 
-    texto_obs = f"\n📌 *Observações:* {observacoes}" if observacoes else ""
+    # Só inclui os dados de vistoria se a etapa atual for 'Vistoria Concluída'
+    texto_obs = ""
+    if etapa_nome == "Vistoria Concluída" and observacoes:
+        texto_obs = f"\n\n📌 *Dados da Vistoria:* {observacoes}"
+
+    # Cabeçalho do estabelecimento
+    cabecalho_empresa = (
+        f"*{nome_estabelecimento}*\n" if nome_estabelecimento else ""
+    )
 
     mensagem = (
+        f"{cabecalho_empresa}"
         f"Olá {proprietario}! 👋\n\n"
-        f"Atualização sobre o seu *{modelo} ({cor})*:\n"
-        f"Status atual: *{etapa_nome}*{texto_obs}\n\n"
+        f"Atualização sobre o seu veículo *{modelo}* ({cor} - {ano}):\n"
+        f"Status: *{etapa_nome}*{texto_obs}\n\n"
         f"Qualquer dúvida, estamos à disposição!"
     )
 
