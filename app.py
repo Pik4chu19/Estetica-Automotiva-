@@ -18,6 +18,29 @@ st.set_page_config(page_title="Estética Automotiva - Gestão", page_icon="🚗"
 
 st.title("🚗 Controle de Serviços - Estética Automotiva")
 
+# --- INICIALIZAÇÃO DE VARIÁVEIS ---
+# Garantindo que todas as variáveis existam mesmo se não forem preenchidas pelo usuário
+nome_estabelecimento = ""
+endereco_empresa = ""
+telefone_empresa = ""
+responsavel_empresa = ""
+logo_empresa = None
+
+veiculo = ""
+cor = ""
+ano = ""
+proprietario = ""
+telefone = ""
+
+observacoes_vistoria = ""
+servicos_acertados = ""
+fotos_vistoria = []
+
+observacoes_finais = ""
+valor_final = 0.0
+chave_pix = ""
+fotos_finalizacao = []
+
 # --- DADOS DO ESTABELECIMENTO E VEÍCULO ---
 st.subheader("📋 Dados Gerais")
 
@@ -90,8 +113,8 @@ if fotos_vistoria:
             )
 
 # --- SERVIÇOS CONTRATADOS ---
-st.subheader("🛠️ Serviços combinados com o Cliente")
-servicos_contratados = st.text_area(
+st.subheader("🛠️ Serviços Acertados com o Cliente")
+servicos_acertados = st.text_area(
     "Descreva os serviços a serem executados:",
     placeholder="Ex: Lavagem detalhada, Higienização interna, Vitrificação de pintura.",
 )
@@ -136,11 +159,6 @@ for idx, etapa in enumerate(etapas):
                 st.rerun()
 
 # --- CAMPOS APÓS FINALIZAÇÃO (ÚLTIMA ETAPA) ---
-observacoes_finais = ""
-valor_final = 0.0
-chave_pix = ""
-fotos_finalizacao = []
-
 if st.session_state.etapa_atual == len(etapas):
     st.divider()
     st.subheader("✨ Finalização e Entrega")
@@ -350,7 +368,7 @@ def gerar_pdf():
     story.append(Spacer(1, 10))
 
     if servicos_acertados:
-        story.append(Paragraph("Serviços contratados", subtitle_style))
+        story.append(Paragraph("Serviços Acertados", subtitle_style))
         story.append(Paragraph(servicos_acertados, body_style))
         story.append(Spacer(1, 10))
 
