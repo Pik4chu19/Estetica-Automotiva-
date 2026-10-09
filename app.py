@@ -221,18 +221,177 @@ def gerar_pdf():
         bottomMargin=36,
     )
     story = []
+    
+    # Definição segura dos estilos
     styles = getSampleStyleSheet()
-
+    
+    body_style = styles["BodyText"]
+    
     title_style = ParagraphStyle(
-        "TitleStyle",
+        name="PDFTitle",
         parent=styles["Heading1"],
         fontSize=18,
         leading=22,
         alignment=0,
         textColor=colors.HexColor("#1A365D"),
     )
+    
     subtitle_style = ParagraphStyle(
-        "SubTitleStyle",
+        name="PDFSubTitle",
         parent=styles["Heading2"],
         fontSize=12,
-        leading
+        leading=16,
+        textColor=colors.HexColor("#2B6CB0"),
+        spaceBefore=10,
+        spaceAfter=5,
+    )
+    
+    sub_info_style = ParagraphStyle(
+        name="PDFSubInfo",
+        parent=title_style,
+        fontSize=11,
+        textColor=colors.gray,
+    )
+
+    empresa_txt = nome_estabelecimento if nome_estabelecimento else "Estética Automotiva"
+
+    header_text = [
+        Paragraph(f"<b>{empresa_txt}</b>", title_style),
+        Paragraph("Relatório de Serviço e Vistoria", sub_info_style),
+    ]
+
+    if logo_empresa:
+        img_logo = Image.open(logo_empresa)
+        img_io_logo = io.BytesIO()
+        img_logo.convert("RGB").save(img_io_logo, format="JPEG", quality=85)
+        img_io_logo.seek(0)
+        rl_logo = RLImage(img_io_logo, width=100, height=60)
+
+        tabela_header = Table([[rl_logo, header_text]], colWidths=[110, 430])
+        tabela_header.setStyle(
+            TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("ALIGN", (1, 0), (1, 0), "LEFT"),
+            ])
+        )
+        story.append(tabela_header)
+    else:
+        story.append(header_text[0])
+        story.append(header_text[1])
+
+    story.append(Spacer(1, 15))
+
+    dados_veiculo = [
+        [
+            Paragraph("<b>Proprietário:</b>", body_style),
+            Paragraph(proprietario or "-", body_style),
+            Paragraph("<b>Telefone:</b>", body_style),
+            Paragraph(telefone or "-", body_style),
+        ],
+        [
+            Paragraph("<b>Veículo:</b>", body_style),
+            Paragraph(veiculo or "-", body_style),
+            Paragraph("<b>Cor / Ano:</b>", body_style),
+            Paragraph(f"{cor or '-'} / {ano or '-'}", body_style),
+        ],
+    ]
+    tabela = Table(dados_veiculo, colWidths=[100, 170, 90, 180])
+    tabela.setStyle(
+        TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F7FAFC")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("PADDING", (0, 0), (-1, -1), 6),
+        ])
+    )
+    story.append(tabela)
+    story.append(Spacer(1, 10))
+
+    if servicos_acertados:
+        story.append(Paragraph("Serviços Acertados", subtitle_style))
+        story.append(Paragraph(servicos_acertados, body_style))
+        story.append(Spacer(1, 10))
+
+    if observacoes_vistoria:
+        story.append(Paragraph("Observações da Vistoria", subtitle_style))
+        story.append(Paragraph(observacoes_vistoria, body_style))
+        story.append(Spacer(1, 10))
+
+    if observacoes_finais or valor_final > 0:
+        story.append(Paragraph("Finalização do Serviço", subtitle_style))
+        if observacoes_finais:
+            story.append(
+                Paragraph(
+                    f"<b>Observações Finais:</b> {observacoes_finais}",
+                    body_style,
+                )
+            )
+        if valor_final > 0:
+            story.append(
+                Paragraph(
+                    f"<b>Valor Total do Serviço:</b> R$ {valor_final:.2f}",
+                    body_style,
+                )
+            )
+        story.append(Spacer(1, 10))
+
+    def adicionar_fotos_ao_pdf(lista_arquivos, titulo_secao):
+        if not lista_arquivos:
+            return
+        story.append(Paragraph(titulo_secao, subtitle_style))
+        imgs_row = []
+        tabela_fotos = []
+        for file in lista_arquivos:
+            img = Image.open(file)
+            img_io = io.BytesIO()
+            img.convert("RGB").save(img_io, format="JPEG", quality=75)
+            img_io.seek(0)
+            rl_img = RLImage(img_io, width=160, height=120)
+            imgs_row.append(rl_img)
+
+            if len(imgs_row) == 3:
+                tabela_fotos.append(imgs_row)
+                imgs_row = []
+        if imgs_row:
+            while len(imgs_row) < 3:
+                imgs_row.append("")
+            tabela_fotos.append(imgs_row)
+
+        t_fotos = Table(tabela_fotos, colWidths=[180, 180, 180])
+        t_fotos.setStyle(
+            TableStyle([
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("PADDING", (0, 0), (-1, -1), 4),
+            ])
+        )
+        story.append(t_fotos)
+        story.append(Spacer(1, 10))
+
+    adicionar_fotos_ao_pdf(fotos_vistoria, "Fotos da Vistoria Inicial")
+    adicionar_fotos_ao_pdf(fotos_finalizacao, "Fotos do Veículo Finalizado")
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+
+st.divider()
+
+# Botão de Download do PDF
+st.subheader("📄 Relatório do Serviço")
+if st.button("📊 Gerar Relatório em PDF"):
+    pdf_bytes = gerar_pdf()
+    nome_arquivo = f"relatorio_{veiculo or 'veiculo'}.pdf"
+    st.download_button(
+        label="📥 Baixar PDF",
+        data=pdf_bytes,
+        file_name=nome_arquivo,
+        mime="application/pdf",
+    )
+
+# Botão para limpar e iniciar novo veículo
+st.divider()
+if st.button("🔄 Iniciar Novo Veículo"):
+    st.session_state.etapa_atual = 0
+    st.rerun()
