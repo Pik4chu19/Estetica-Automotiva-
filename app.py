@@ -176,7 +176,6 @@ def atualizar_atendimento_db(
 ):
     timestamp_pasta = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Buscar fotos de finalização existentes para não apagar ao atualizar
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute(
@@ -360,4 +359,233 @@ if opcao_menu == "📝 Novo Cadastro / Vistoria":
 elif opcao_menu == "🚗 Abrir Atendimento (Veículo Existente)":
     st.title("⚙️ Gerenciar Atendimento de Veículo Cadastrado")
 
-    clientes
+    clientes = listar_clientes()
+
+    if clientes:
+        cliente_opcoes = {f"{c[1]} (Tel: {c[2]})": c[0] for c in clientes}
+        cliente_selecionado_nome = st.selectbox(
+            "👤 Selecione o Cliente / Proprietário(a):",
+            options=list(cliente_opcoes.keys()),
+        )
+        cliente_id_sel = cliente_opcoes[cliente_selecionado_nome]
+
+        veiculos_cliente = buscar_veiculos_cliente(cliente_id_sel)
+
+        if veiculos_cliente:
+            veiculo_opcoes = {
+                f"{v[1]} ({v[2]} - Ano {v[3]}) [Atendimento #{v[0]}]": v[0]
+                for v in veiculos_cliente
+            }
+            veiculo_selecionado_str = st.selectbox(
+                "🚗 Selecione qual veículo cadastrado deseja mexer:",
+                options=list(veiculo_opcoes.keys()),
+            )
+            atendimento_id_sel = veiculo_opcoes[veiculo_selecionado_str]
+
+            reg = carregar_atendimento_por_id(atendimento_id_sel)
+            if reg:
+                (
+                    reg_id,
+                    cli_id,
+                    data_atend,
+                    nome_est,
+                    end_est,
+                    tel_est,
+                    resp_est,
+                    prop,
+                    tel_cli,
+                    veic,
+                    cor_v,
+                    ano_v,
+                    obs_vist,
+                    serv_acert,
+                    obs_fin,
+                    val_fin,
+                    pix,
+                    f_vist_json,
+                    f_fin_json,
+                    status_atend,
+                ) = reg
+
+                st.info(
+                    f"Atendimento selecionado para: **{prop}** - Veículo: **{veic}** ({cor_v} - {ano_v}) | Status: **{status_atend}**"
+                )
+
+                st.divider()
+                st.subheader("🛠️ 4. Serviços Combinados")
+                servicos_acertados = st.text_area(
+                    "Descreva os serviços acertados com o cliente:",
+                    value=serv_acert or "",
+                    placeholder="Ex: Lavagem detalhada, Higienização interna, Vitrificação de pintura.",
+                )
+
+                st.divider()
+                st.subheader("⚙️ 5. Acompanhamento do Processo")
+
+                etapas = [
+                    "Vistoria Concluída",
+                    "🚿 Já iniciamos a lavagem e limpeza do seu veículo.",
+                    "🌬 Lavagem finalizada, estamos no processo de secagem e aplicação de acabamentos solicitados.",
+                    "🌟 Processo final de serviços, em poucos minutos estará pronto.",
+                    "🫡 Prontinho, seu veículo está pronto para ser retirado, estamos te aguardando.",
+                ]
+
+                if "etapa_atual" not in st.session_state:
+                    st.session_state.etapa_atual = 0
+
+                def gerar_link_whatsapp(num, texto):
+                    texto_codificado = urllib.parse.quote(texto)
+                    return f"https://api.whatsapp.com/send?phone=55{num}&text={texto_codificado}"
+
+                for idx, etapa in enumerate(etapas):
+                    col_status, col_acao = st.columns([3, 2])
+
+                    with col_status:
+                        if idx < st.session_state.etapa_atual:
+                            st.success(f"✅ {etapa}")
+                        elif idx == st.session_state.etapa_atual:
+                            st.warning(f"⏳ Em andamento: {etapa}")
+                        else:
+                            st.caption(f"⚪ {etapa}")
+
+                    with col_acao:
+                        if idx == st.session_state.etapa_atual:
+                            if st.button(f"Concluir: {etapa}", key=f"etp_{idx}"):
+                                st.session_state.etapa_atual += 1
+                                st.rerun()
+
+                observacoes_finais = ""
+                valor_final = val_fin or 0.0
+                chave_pix = pix or ""
+                fotos_finalizacao = []
+
+                if st.session_state.etapa_atual == len(etapas):
+                    st.divider()
+                    st.subheader("✨ 6. Finalização e Entrega")
+
+                    col_v1, col_v2, col_v3 = st.columns(3)
+                    with col_v1:
+                        valor_final = st.number_input(
+                            "💰 Valor Total dos Serviços (R$):",
+                            min_value=0.0,
+                            value=float(val_fin or 0.0),
+                            format="%.2f",
+                            step=10.0,
+                        )
+                    with col_v2:
+                        chave_pix = st.text_input(
+                            "🔑 Chave Pix para Pagamento:",
+                            value=pix or "",
+                            placeholder="Ex: CPF, CNPJ, Telefone ou E-mail",
+                        )
+                    with col_v3:
+                        observacoes_finais = st.text_area(
+                            "📝 Observações Finais / Recomendações:",
+                            value=obs_fin or "",
+                            placeholder="Ex: Não lavar o veículo pelas próximas 48h.",
+                        )
+
+                    st.subheader("📸 Fotos do Veículo Finalizado")
+                    fotos_finalizacao = st.file_uploader(
+                        "Anexe as fotos do veículo pronto/entregue:",
+                        type=["png", "jpg", "jpeg"],
+                        accept_multiple_files=True,
+                        key="finalizacao_existente",
+                    )
+
+                if tel_cli and veic:
+                    st.divider()
+                    st.subheader("📲 Notificar Cliente via WhatsApp")
+
+                    etapa_nome = (
+                        etapas[st.session_state.etapa_atual - 1]
+                        if st.session_state.etapa_atual > 0
+                        else "Cadastro Inicial"
+                    )
+
+                    texto_detalhes = ""
+                    if etapa_nome == "Vistoria Concluída":
+                        if obs_vist:
+                            texto_detalhes += f"\n\n📌 *Vistoria:* {obs_vist}"
+                        if servicos_acertados:
+                            texto_detalhes += (
+                                f"\n🛠️ *Serviços Acertados:* {servicos_acertados}"
+                            )
+
+                    elif st.session_state.etapa_atual == len(etapas):
+                        if observacoes_finais:
+                            texto_detalhes += (
+                                f"\n\n📝 *Observações Finais:* {observacoes_finais}"
+                            )
+                        if valor_final > 0:
+                            texto_detalhes += (
+                                f"\n💰 *Valor Total:* R$ {valor_final:.2f}"
+                            )
+                        if chave_pix:
+                            texto_detalhes += f"\n🔑 *Chave Pix:* {chave_pix}"
+
+                        texto_detalhes += (
+                            "\n\n✨ *\"Cuidamos hoje do bem que um dia foi seu maior sonho, "
+                            "porque aquilo que conquistamos merece ser preservado nos mínimos detalhes.\"*"
+                        )
+
+                    cabecalho_empresa = (
+                        f"*{nome_est}*\n" if nome_est else ""
+                    )
+
+                    mensagem = (
+                        f"{cabecalho_empresa}"
+                        f"Olá {prop}! 👋\n\n"
+                        f"Atualização sobre o seu veículo *{veic}* ({cor_v} - {ano_v}):\n"
+                        f"Status: *{etapa_nome}*{texto_detalhes}\n\n"
+                        f"Qualquer dúvida, estamos à disposição!"
+                    )
+
+                    link_wa = gerar_link_whatsapp(tel_cli, mensagem)
+
+                    st.markdown(
+                        f'<a href="{link_wa}" target="_blank">'
+                        f'<button style="background-color:#25D366; color:white; border:none; padding:12px 24px; border-radius:8px; cursor:pointer; font-weight:bold; font-size:16px;">'
+                        f"Enviar Status via WhatsApp 🚀"
+                        f"</button></a>",
+                        unsafe_allow_html=True,
+                    )
+
+                st.divider()
+                st.subheader("💾 Salvar e Gerar Relatório")
+
+                col_b1, col_b2 = st.columns(2)
+
+                with col_b1:
+                    if st.button("💾 Concluir e Atualizar Atendimento"):
+                        dados_atualizacao = {
+                            "servicos_acertados": servicos_acertados,
+                            "observacoes_finais": observacoes_finais,
+                            "valor_final": valor_final,
+                            "chave_pix": chave_pix,
+                        }
+                        atualizar_atendimento_db(
+                            atendimento_id_sel,
+                            dados_atualizacao,
+                            fotos_finalizacao,
+                        )
+                        st.success(
+                            "✅ Atendimento atualizado e salvo com sucesso!"
+                        )
+                        st.rerun()
+
+                with col_b2:
+
+                    def gerar_pdf_atendimento():
+                        buffer = io.BytesIO()
+                        doc = SimpleDocTemplate(
+                            buffer,
+                            pagesize=letter,
+                            rightMargin=36,
+                            leftMargin=36,
+                            topMargin=36,
+                            bottomMargin=36,
+                        )
+                        story = []
+
+                        styles = getSampleStyleSheet()
