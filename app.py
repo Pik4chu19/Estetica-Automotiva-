@@ -112,7 +112,6 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Busca exata ou cria novo cliente
     cursor.execute(
         "SELECT id FROM clientes WHERE nome = ? OR telefone = ?",
         (dados.get("proprietario"), dados.get("telefone")),
@@ -172,18 +171,27 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
     return atendimento_id
 
 
-def atualizar_atendimento_db(atendimento_id, dados, arquivos_finalizacao):
+def atualizar_atendimento_db(
+    atendimento_id, dados, arquivos_finalizacao_novos
+):
     timestamp_pasta = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    caminhos_finalizacao = []
-    if arquivos_finalizacao:
-        for f in arquivos_finalizacao:
+    # Buscar fotos de finalização existentes para não apagar ao atualizar
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT fotos_finalizacao FROM atendimentos WHERE id = ?",
+        (atendimento_id,),
+    )
+    res = cursor.fetchone()
+    caminhos_finalizacao = json.loads(res[0]) if res and res[0] else []
+
+    if arquivos_finalizacao_novos:
+        for f in arquivos_finalizacao_novos:
             caminhos_finalizacao.append(
                 salvar_foto_disco(f, f"{timestamp_pasta}_finalizacao")
             )
 
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
     cursor.execute(
         """
         UPDATE atendimentos SET
@@ -340,7 +348,9 @@ if opcao_menu == "📝 Novo Cadastro / Vistoria":
             st.success(
                 f"✅ Cadastro realizado com sucesso! (ID do Atendimento: #{novo_id})"
             )
-            st.balloons()
+            st.info(
+                "💡 Vá na aba **'Abrir Atendimento (Veículo Existente)'** para gerenciar os serviços deste veículo."
+            )
         else:
             st.error("⚠️ Preencha os campos obrigatórios (Veículo e Proprietário).")
 
@@ -350,331 +360,4 @@ if opcao_menu == "📝 Novo Cadastro / Vistoria":
 elif opcao_menu == "🚗 Abrir Atendimento (Veículo Existente)":
     st.title("⚙️ Gerenciar Atendimento de Veículo Cadastrado")
 
-    clientes = listar_clientes()
-
-    if clientes:
-        cliente_opcoes = {f"{c[1]} (Tel: {c[2]})": c[0] for c in clientes}
-        cliente_selecionado_nome = st.selectbox(
-            "👤 Selecione o Cliente / Proprietário(a):",
-            options=list(cliente_opcoes.keys()),
-        )
-        cliente_id_sel = cliente_opcoes[cliente_selecionado_nome]
-
-        veiculos_cliente = buscar_veiculos_cliente(cliente_id_sel)
-
-        if veiculos_cliente:
-            veiculo_opcoes = {
-                f"{v[1]} ({v[2]} - Ano {v[3]}) [Atendimento #{v[0]}]": v[0]
-                for v in veiculos_cliente
-            }
-            veiculo_selecionado_str = st.selectbox(
-                "🚗 Selecione qual veículo cadastrado deseja mexer:",
-                options=list(veiculo_opcoes.keys()),
-            )
-            atendimento_id_sel = veiculo_opcoes[veiculo_selecionado_str]
-
-            reg = carregar_atendimento_por_id(atendimento_id_sel)
-            if reg:
-                (
-                    reg_id,
-                    cli_id,
-                    data_atend,
-                    nome_est,
-                    end_est,
-                    tel_est,
-                    resp_est,
-                    prop,
-                    tel_cli,
-                    veic,
-                    cor_v,
-                    ano_v,
-                    obs_vist,
-                    serv_acert,
-                    obs_fin,
-                    val_fin,
-                    pix,
-                    f_vist_json,
-                    f_fin_json,
-                    status_atend,
-                ) = reg
-
-                st.info(
-                    f"Atendimento selecionado para: **{prop}** - Veículo: **{veic}** ({cor_v} - {ano_v}) | Status: **{status_atend}**"
-                )
-
-                st.divider()
-                st.subheader("🛠️ 4. Serviços Combinados")
-                servicos_acertados = st.text_area(
-                    "Descreva os serviços acertados com o cliente:",
-                    value=serv_acert or "",
-                    placeholder="Ex: Lavagem detalhada, Higienização interna, Vitrificação de pintura.",
-                )
-
-                st.divider()
-                st.subheader("⚙️ 5. Acompanhamento do Processo")
-
-                etapas = [
-                    "Vistoria Concluída",
-                    "🚿 Já iniciamos a lavagem e limpeza do seu veículo.",
-                    "🌬 Lavagem finalizada, estamos no processo de secagem e aplicação de acabamentos solicitados.",
-                    "🌟 Processo final de serviços, em poucos minutos estará pronto.",
-                    "🫡 Prontinho, seu veículo está pronto para ser retirado, estamos te aguardando.",
-                ]
-
-                if "etapa_atual" not in st.session_state:
-                    st.session_state.etapa_atual = 0
-
-                def gerar_link_whatsapp(num, texto):
-                    texto_codificado = urllib.parse.quote(texto)
-                    return f"https://api.whatsapp.com/send?phone=55{num}&text={texto_codificado}"
-
-                for idx, etapa in enumerate(etapas):
-                    col_status, col_acao = st.columns([3, 2])
-
-                    with col_status:
-                        if idx < st.session_state.etapa_atual:
-                            st.success(f"✅ {etapa}")
-                        elif idx == st.session_state.etapa_atual:
-                            st.warning(f"⏳ Em andamento: {etapa}")
-                        else:
-                            st.caption(f"⚪ {etapa}")
-
-                    with col_acao:
-                        if idx == st.session_state.etapa_atual:
-                            if st.button(f"Concluir: {etapa}", key=f"etp_{idx}"):
-                                st.session_state.etapa_atual += 1
-                                st.rerun()
-
-                observacoes_finais = ""
-                valor_final = val_fin or 0.0
-                chave_pix = pix or ""
-                fotos_finalizacao = []
-
-                if st.session_state.etapa_atual == len(etapas):
-                    st.divider()
-                    st.subheader("✨ 6. Finalização e Entrega")
-
-                    col_v1, col_v2, col_v3 = st.columns(3)
-                    with col_v1:
-                        valor_final = st.number_input(
-                            "💰 Valor Total dos Serviços (R$):",
-                            min_value=0.0,
-                            value=float(val_fin or 0.0),
-                            format="%.2f",
-                            step=10.0,
-                        )
-                    with col_v2:
-                        chave_pix = st.text_input(
-                            "🔑 Chave Pix para Pagamento:",
-                            value=pix or "",
-                            placeholder="Ex: CPF, CNPJ, Telefone ou E-mail",
-                        )
-                    with col_v3:
-                        observacoes_finais = st.text_area(
-                            "📝 Observações Finais / Recomendações:",
-                            value=obs_fin or "",
-                            placeholder="Ex: Não lavar o veículo pelas próximas 48h.",
-                        )
-
-                    st.subheader("📸 Fotos do Veículo Finalizado")
-                    fotos_finalizacao = st.file_uploader(
-                        "Anexe as fotos do veículo pronto/entregue:",
-                        type=["png", "jpg", "jpeg"],
-                        accept_multiple_files=True,
-                        key="finalizacao_existente",
-                    )
-
-                    if fotos_finalizacao:
-                        st.write(
-                            f"**{len(fotos_finalizacao)} foto(s) de finalização carregada(s):**"
-                        )
-                        cols_fin = st.columns(3)
-                        for index, foto in enumerate(fotos_finalizacao):
-                            with cols_fin[index % 3]:
-                                st.image(
-                                    foto,
-                                    caption=f"Finalizado {index + 1}",
-                                    use_container_width=True,
-                                )
-
-                if tel_cli and veic:
-                    st.divider()
-                    st.subheader("📲 Notificar Cliente via WhatsApp")
-
-                    etapa_nome = (
-                        etapas[st.session_state.etapa_atual - 1]
-                        if st.session_state.etapa_atual > 0
-                        else "Cadastro Inicial"
-                    )
-
-                    texto_detalhes = ""
-                    if etapa_nome == "Vistoria Concluída":
-                        if obs_vist:
-                            texto_detalhes += f"\n\n📌 *Vistoria:* {obs_vist}"
-                        if servicos_acertados:
-                            texto_detalhes += (
-                                f"\n🛠️ *Serviços Acertados:* {servicos_acertados}"
-                            )
-
-                    elif st.session_state.etapa_atual == len(etapas):
-                        if observacoes_finais:
-                            texto_detalhes += (
-                                f"\n\n📝 *Observações Finais:* {observacoes_finais}"
-                            )
-                        if valor_final > 0:
-                            texto_detalhes += (
-                                f"\n💰 *Valor Total:* R$ {valor_final:.2f}"
-                            )
-                        if chave_pix:
-                            texto_detalhes += f"\n🔑 *Chave Pix:* {chave_pix}"
-
-                        texto_detalhes += (
-                            "\n\n✨ *\"Cuidamos hoje do bem que um dia foi seu maior sonho, "
-                            "porque aquilo que conquistamos merece ser preservado nos mínimos detalhes.\"*"
-                        )
-
-                    cabecalho_empresa = (
-                        f"*{nome_est}*\n" if nome_est else ""
-                    )
-
-                    mensagem = (
-                        f"{cabecalho_empresa}"
-                        f"Olá {prop}! 👋\n\n"
-                        f"Atualização sobre o seu veículo *{veic}* ({cor_v} - {ano_v}):\n"
-                        f"Status: *{etapa_nome}*{texto_detalhes}\n\n"
-                        f"Qualquer dúvida, estamos à disposição!"
-                    )
-
-                    link_wa = gerar_link_whatsapp(tel_cli, mensagem)
-
-                    st.markdown(
-                        f'<a href="{link_wa}" target="_blank">'
-                        f'<button style="background-color:#25D366; color:white; border:none; padding:12px 24px; border-radius:8px; cursor:pointer; font-weight:bold; font-size:16px;">'
-                        f"Enviar Status via WhatsApp 🚀"
-                        f"</button></a>",
-                        unsafe_allow_html=True,
-                    )
-
-                st.divider()
-                if st.button("💾 Concluir e Atualizar Atendimento"):
-                    dados_atualizacao = {
-                        "servicos_acertados": servicos_acertados,
-                        "observacoes_finais": observacoes_finais,
-                        "valor_final": valor_final,
-                        "chave_pix": chave_pix,
-                    }
-                    atualizar_atendimento_db(
-                        atendimento_id_sel,
-                        dados_atualizacao,
-                        fotos_finalizacao,
-                    )
-                    st.success(
-                        "✅ Atendimento atualizado e salvo no histórico com sucesso!"
-                    )
-        else:
-            st.warning("Este cliente ainda não possui veículos cadastrados.")
-    else:
-        st.info(
-            "Nenhum cliente cadastrado ainda. Vá em 'Novo Cadastro / Vistoria' primeiro."
-        )
-
-# ==========================================
-# ABA 3: HISTÓRICO DE CLIENTES
-# ==========================================
-elif opcao_menu == "📂 Histórico de Clientes":
-    st.title("📂 Histórico de Atendimentos")
-
-    termo_busca = st.text_input(
-        "🔍 Buscar por Proprietário(a), Veículo ou Telefone:",
-        placeholder="Digite o nome ou modelo do carro...",
-    )
-
-    registros = buscar_atendimentos(termo_busca)
-
-    if registros:
-        st.write(f"**Total de registros encontrados:** {len(registros)}")
-
-        for reg in registros:
-            (
-                reg_id,
-                cli_id,
-                data_atend,
-                nome_est,
-                end_est,
-                tel_est,
-                resp_est,
-                prop,
-                tel_cli,
-                veic,
-                cor_v,
-                ano_v,
-                obs_vist,
-                serv_acert,
-                obs_fin,
-                val_fin,
-                pix,
-                f_vist_json,
-                f_fin_json,
-                status,
-            ) = reg
-
-            status_tag = "🟡 Em Aberto" if status == "Em Aberto" else "✅ Concluído"
-
-            with st.expander(
-                f"{status_tag} | 🚗 {veic or 'Veículo'} - {prop or 'Cliente'} ({data_atend})"
-            ):
-                col_h1, col_h2 = st.columns(2)
-                with col_h1:
-                    st.write(f"**Proprietário(a):** {prop or '-'}")
-                    st.write(f"**Telefone:** {tel_cli or '-'}")
-                    st.write(f"**Veículo:** {veic or '-'}")
-                    st.write(f"**Cor / Ano:** {cor_v or '-'} / {ano_v or '-'}")
-                with col_h2:
-                    st.write(f"**Valor Total:** R$ {val_fin or 0.0:.2f}")
-                    st.write(f"**Chave Pix:** {pix or '-'}")
-                    st.write(f"**Responsável:** {resp_est or '-'}")
-
-                if serv_acert:
-                    st.write(f"**Serviços Executados:**\n{serv_acert}")
-                if obs_vist:
-                    st.write(f"**Observações de Vistoria:**\n{obs_vist}")
-                if obs_fin:
-                    st.write(f"**Observações Finais:**\n{obs_fin}")
-
-                # Fotos Vistoria
-                try:
-                    caminhos_vist = json.loads(f_vist_json) if f_vist_json else []
-                except Exception:
-                    caminhos_vist = []
-
-                if caminhos_vist:
-                    st.write("**📸 Fotos da Vistoria Inicial:**")
-                    cols_hv = st.columns(3)
-                    for idx_f, p_foto in enumerate(caminhos_vist):
-                        if os.path.exists(p_foto):
-                            with cols_hv[idx_f % 3]:
-                                st.image(
-                                    p_foto,
-                                    caption=f"Vistoria {idx_f + 1}",
-                                    use_container_width=True,
-                                )
-
-                # Fotos Finalização
-                try:
-                    caminhos_fin = json.loads(f_fin_json) if f_fin_json else []
-                except Exception:
-                    caminhos_fin = []
-
-                if caminhos_fin:
-                    st.write("**📸 Fotos do Veículo Finalizado:**")
-                    cols_hf = st.columns(3)
-                    for idx_f, p_foto in enumerate(caminhos_fin):
-                        if os.path.exists(p_foto):
-                            with cols_hf[idx_f % 3]:
-                                st.image(
-                                    p_foto,
-                                    caption=f"Finalizado {idx_f + 1}",
-                                    use_container_width=True,
-                                )
-    else:
-        st.info("Nenhum histórico de atendimento encontrado.")
+    clientes
