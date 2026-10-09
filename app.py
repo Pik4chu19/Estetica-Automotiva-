@@ -121,13 +121,14 @@ for idx, etapa in enumerate(etapas):
 # --- CAMPOS APÓS FINALIZAÇÃO (ÚLTIMA ETAPA) ---
 observacoes_finais = ""
 valor_final = 0.0
+chave_pix = ""
 fotos_finalizacao = []
 
 if st.session_state.etapa_atual == len(etapas):
     st.divider()
     st.subheader("✨ Finalização e Entrega")
 
-    col_v1, col_v2 = st.columns(2)
+    col_v1, col_v2, col_v3 = st.columns(3)
     with col_v1:
         valor_final = st.number_input(
             "💰 Valor Total dos Serviços (R$):",
@@ -136,9 +137,14 @@ if st.session_state.etapa_atual == len(etapas):
             step=10.0,
         )
     with col_v2:
+        chave_pix = st.text_input(
+            "🔑 Chave Pix para Pagamento:",
+            placeholder="Ex: CPF, CNPJ, Telefone ou E-mail",
+        )
+    with col_v3:
         observacoes_finais = st.text_area(
             "📝 Observações Finais / Recomendações:",
-            placeholder="Ex: Não lavar o veículo pelas próximas 48h devido à cura do vitrificador.",
+            placeholder="Ex: Não lavar o veículo pelas próximas 48h.",
         )
 
     st.subheader("📸 Fotos do Veículo Finalizado")
@@ -185,6 +191,13 @@ if telefone and veiculo:
             texto_detalhes += f"\n\n📝 *Observações Finais:* {observacoes_finais}"
         if valor_final > 0:
             texto_detalhes += f"\n💰 *Valor Total:* R$ {valor_final:.2f}"
+        if chave_pix:
+            texto_detalhes += f"\n🔑 *Chave Pix:* {chave_pix}"
+
+        texto_detalhes += (
+            "\n\n✨ *\"Cuidamos hoje do bem que um dia foi seu maior sonho, "
+            "porque aquilo que conquistamos merece ser preservado nos mínimos detalhes.\"*"
+        )
 
     cabecalho_empresa = (
         f"*{nome_estabelecimento}*\n" if nome_estabelecimento else ""
@@ -221,12 +234,10 @@ def gerar_pdf():
         bottomMargin=36,
     )
     story = []
-    
-    # Definição segura dos estilos
+
     styles = getSampleStyleSheet()
-    
     body_style = styles["BodyText"]
-    
+
     title_style = ParagraphStyle(
         name="PDFTitle",
         parent=styles["Heading1"],
@@ -235,7 +246,7 @@ def gerar_pdf():
         alignment=0,
         textColor=colors.HexColor("#1A365D"),
     )
-    
+
     subtitle_style = ParagraphStyle(
         name="PDFSubTitle",
         parent=styles["Heading2"],
@@ -245,7 +256,7 @@ def gerar_pdf():
         spaceBefore=10,
         spaceAfter=5,
     )
-    
+
     sub_info_style = ParagraphStyle(
         name="PDFSubInfo",
         parent=title_style,
@@ -253,7 +264,9 @@ def gerar_pdf():
         textColor=colors.gray,
     )
 
-    empresa_txt = nome_estabelecimento if nome_estabelecimento else "Estética Automotiva"
+    empresa_txt = (
+        nome_estabelecimento if nome_estabelecimento else "Estética Automotiva"
+    )
 
     header_text = [
         Paragraph(f"<b>{empresa_txt}</b>", title_style),
@@ -317,7 +330,7 @@ def gerar_pdf():
         story.append(Paragraph(observacoes_vistoria, body_style))
         story.append(Spacer(1, 10))
 
-    if observacoes_finais or valor_final > 0:
+    if observacoes_finais or valor_final > 0 or chave_pix:
         story.append(Paragraph("Finalização do Serviço", subtitle_style))
         if observacoes_finais:
             story.append(
@@ -330,6 +343,13 @@ def gerar_pdf():
             story.append(
                 Paragraph(
                     f"<b>Valor Total do Serviço:</b> R$ {valor_final:.2f}",
+                    body_style,
+                )
+            )
+        if chave_pix:
+            story.append(
+                Paragraph(
+                    f"<b>Chave Pix para Pagamento:</b> {chave_pix}",
                     body_style,
                 )
             )
