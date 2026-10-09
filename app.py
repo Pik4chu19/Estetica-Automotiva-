@@ -252,7 +252,7 @@ opcao_menu = st.sidebar.radio(
     [
         "📝 Novo Cadastro / Vistoria",
         "🚗 Abrir Atendimento (Veículo Existente)",
-        "📂 Histórico de Clientes",
+        "📂 Histórico de Atendimento",
     ],
 )
 
@@ -589,3 +589,335 @@ elif opcao_menu == "🚗 Abrir Atendimento (Veículo Existente)":
                         story = []
 
                         styles = getSampleStyleSheet()
+                        body_style = styles["BodyText"]
+
+                        title_style = ParagraphStyle(
+                            name="PDFTitle",
+                            parent=styles["Heading1"],
+                            fontSize=16,
+                            leading=20,
+                            textColor=colors.HexColor("#1A365D"),
+                        )
+
+                        subtitle_style = ParagraphStyle(
+                            name="PDFSubTitle",
+                            parent=styles["Heading2"],
+                            fontSize=12,
+                            leading=16,
+                            textColor=colors.HexColor("#2B6CB0"),
+                            spaceBefore=10,
+                            spaceAfter=5,
+                        )
+
+                        sub_info_style = ParagraphStyle(
+                            name="PDFSubInfo",
+                            parent=title_style,
+                            fontSize=9,
+                            leading=13,
+                            textColor=colors.HexColor("#4A5568"),
+                        )
+
+                        empresa_txt = (
+                            nome_est if nome_est else "Estética Automotiva"
+                        )
+                        header_paragraphs = [
+                            Paragraph(f"<b>{empresa_txt}</b>", title_style)
+                        ]
+
+                        if end_est:
+                            header_paragraphs.append(
+                                Paragraph(
+                                    f"<b>Endereço:</b> {end_est}",
+                                    sub_info_style,
+                                )
+                            )
+                        if tel_est:
+                            header_paragraphs.append(
+                                Paragraph(
+                                    f"<b>Telefone:</b> {tel_est}",
+                                    sub_info_style,
+                                )
+                            )
+                        if resp_est:
+                            header_paragraphs.append(
+                                Paragraph(
+                                    f"<b>Responsável:</b> {resp_est}",
+                                    sub_info_style,
+                                )
+                            )
+
+                        for p in header_paragraphs:
+                            story.append(p)
+
+                        story.append(Spacer(1, 15))
+
+                        dados_veiculo = [
+                            [
+                                Paragraph("<b>Proprietário(a):</b>", body_style),
+                                Paragraph(prop or "-", body_style),
+                                Paragraph("<b>Telefone:</b>", body_style),
+                                Paragraph(tel_cli or "-", body_style),
+                            ],
+                            [
+                                Paragraph("<b>Veículo:</b>", body_style),
+                                Paragraph(veic or "-", body_style),
+                                Paragraph("<b>Cor / Ano:</b>", body_style),
+                                Paragraph(
+                                    f"{cor_v or '-'} / {ano_v or '-'}",
+                                    body_style,
+                                ),
+                            ],
+                        ]
+                        tabela = Table(
+                            dados_veiculo, colWidths=[100, 170, 90, 180]
+                        )
+                        tabela.setStyle(
+                            TableStyle([
+                                (
+                                    "BACKGROUND",
+                                    (0, 0),
+                                    (-1, -1),
+                                    colors.HexColor("#F7FAFC"),
+                                ),
+                                (
+                                    "GRID",
+                                    (0, 0),
+                                    (-1, -1),
+                                    0.5,
+                                    colors.HexColor("#E2E8F0"),
+                                ),
+                                ("PADDING", (0, 0), (-1, -1), 6),
+                            ])
+                        )
+                        story.append(tabela)
+                        story.append(Spacer(1, 10))
+
+                        if serv_acert:
+                            story.append(
+                                Paragraph("Serviços Acertados", subtitle_style)
+                            )
+                            story.append(Paragraph(serv_acert, body_style))
+                            story.append(Spacer(1, 10))
+
+                        if obs_vist:
+                            story.append(
+                                Paragraph(
+                                    "Observações da Vistoria", subtitle_style
+                                )
+                            )
+                            story.append(Paragraph(obs_vist, body_style))
+                            story.append(Spacer(1, 10))
+
+                        if observacoes_finais or val_fin > 0 or pix:
+                            story.append(
+                                Paragraph("Finalização do Serviço", subtitle_style)
+                            )
+                            if observacoes_finais:
+                                story.append(
+                                    Paragraph(
+                                        f"<b>Observações Finais:</b> {observacoes_finais}",
+                                        body_style,
+                                    )
+                                )
+                            if val_fin > 0:
+                                story.append(
+                                    Paragraph(
+                                        f"<b>Valor Total do Serviço:</b> R$ {val_fin:.2f}",
+                                        body_style,
+                                    )
+                                )
+                            if pix:
+                                story.append(
+                                    Paragraph(
+                                        f"<b>Chave Pix para Pagamento:</b> {pix}",
+                                        body_style,
+                                    )
+                                )
+                            story.append(Spacer(1, 10))
+
+                        def adicionar_fotos_pdf(caminhos_json, titulo):
+                            try:
+                                lista_paths = (
+                                    json.loads(caminhos_json)
+                                    if caminhos_json
+                                    else []
+                                )
+                            except Exception:
+                                lista_paths = []
+
+                            if not lista_paths:
+                                return
+
+                            story.append(Paragraph(titulo, subtitle_style))
+                            imgs_row = []
+                            tabela_fotos = []
+                            for p_foto in lista_paths:
+                                if os.path.exists(p_foto):
+                                    img = Image.open(p_foto)
+                                    img_io = io.BytesIO()
+                                    img.convert("RGB").save(
+                                        img_io, format="JPEG", quality=75
+                                    )
+                                    img_io.seek(0)
+                                    rl_img = RLImage(
+                                        img_io, width=160, height=120
+                                    )
+                                    imgs_row.append(rl_img)
+
+                                    if len(imgs_row) == 3:
+                                        tabela_fotos.append(imgs_row)
+                                        imgs_row = []
+                            if imgs_row:
+                                while len(imgs_row) < 3:
+                                    imgs_row.append("")
+                                tabela_fotos.append(imgs_row)
+
+                            if tabela_fotos:
+                                t_fotos = Table(
+                                    tabela_fotos, colWidths=[180, 180, 180]
+                                )
+                                t_fotos.setStyle(
+                                    TableStyle([
+                                        (
+                                            "ALIGN",
+                                            (0, 0),
+                                            (-1, -1),
+                                            "CENTER",
+                                        ),
+                                        (
+                                            "VALIGN",
+                                            (0, 0),
+                                            (-1, -1),
+                                            "MIDDLE",
+                                        ),
+                                        ("PADDING", (0, 0), (-1, -1), 4),
+                                    ])
+                                )
+                                story.append(t_fotos)
+                                story.append(Spacer(1, 10))
+
+                        adicionar_fotos_pdf(
+                            f_vist_json, "Fotos da Vistoria Inicial"
+                        )
+                        adicionar_fotos_pdf(
+                            f_fin_json, "Fotos do Veículo Finalizado"
+                        )
+
+                        doc.build(story)
+                        buffer.seek(0)
+                        return buffer
+
+                    pdf_file = gerar_pdf_atendimento()
+                    st.download_button(
+                        label="📥 Baixar PDF para Enviar ao Cliente",
+                        data=pdf_file,
+                        file_name=f"relatorio_{veic or 'veiculo'}.pdf",
+                        mime="application/pdf",
+                    )
+        else:
+            st.warning("Este cliente ainda não possui veículos cadastrados.")
+    else:
+        st.info(
+            "Nenhum cliente cadastrado ainda. Vá em 'Novo Cadastro / Vistoria' primeiro."
+        )
+
+# ==========================================
+# ABA 3: HISTÓRICO DE ATENDIMENTO
+# ==========================================
+elif opcao_menu == "📂 Histórico de Atendimento":
+    st.title("📂 Histórico de Atendimentos")
+
+    termo_busca = st.text_input(
+        "🔍 Buscar por Proprietário(a), Veículo ou Telefone:",
+        placeholder="Digite o nome ou modelo do carro...",
+    )
+
+    registros = buscar_atendimentos(termo_busca)
+
+    if registros:
+        st.write(f"**Total de registros encontrados:** {len(registros)}")
+
+        for reg in registros:
+            (
+                reg_id,
+                cli_id,
+                data_atend,
+                nome_est,
+                end_est,
+                tel_est,
+                resp_est,
+                prop,
+                tel_cli,
+                veic,
+                cor_v,
+                ano_v,
+                obs_vist,
+                serv_acert,
+                obs_fin,
+                val_fin,
+                pix,
+                f_vist_json,
+                f_fin_json,
+                status,
+            ) = reg
+
+            status_tag = "🟡 Em Aberto" if status == "Em Aberto" else "✅ Concluído"
+
+            with st.expander(
+                f"{status_tag} | 🚗 {veic or 'Veículo'} - {prop or 'Cliente'} ({data_atend})"
+            ):
+                col_h1, col_h2 = st.columns(2)
+                with col_h1:
+                    st.write(f"**Proprietário(a):** {prop or '-'}")
+                    st.write(f"**Telefone:** {tel_cli or '-'}")
+                    st.write(f"**Veículo:** {veic or '-'}")
+                    st.write(f"**Cor / Ano:** {cor_v or '-'} / {ano_v or '-'}")
+                with col_h2:
+                    st.write(f"**Valor Total:** R$ {val_fin or 0.0:.2f}")
+                    st.write(f"**Chave Pix:** {pix or '-'}")
+                    st.write(f"**Responsável:** {resp_est or '-'}")
+
+                if serv_acert:
+                    st.write(f"**Serviços Executados:**\n{serv_acert}")
+                if obs_vist:
+                    st.write(f"**Observações de Vistoria:**\n{obs_vist}")
+                if obs_fin:
+                    st.write(f"**Observações Finais:**\n{obs_fin}")
+
+                # Fotos Vistoria
+                try:
+                    caminhos_vist = json.loads(f_vist_json) if f_vist_json else []
+                except Exception:
+                    caminhos_vist = []
+
+                if caminhos_vist:
+                    st.write("**📸 Fotos da Vistoria Inicial:**")
+                    cols_hv = st.columns(3)
+                    for idx_f, p_foto in enumerate(caminhos_vist):
+                        if os.path.exists(p_foto):
+                            with cols_hv[idx_f % 3]:
+                                st.image(
+                                    p_foto,
+                                    caption=f"Vistoria {idx_f + 1}",
+                                    use_container_width=True,
+                                )
+
+                # Fotos Finalização
+                try:
+                    caminhos_fin = json.loads(f_fin_json) if f_fin_json else []
+                except Exception:
+                    caminhos_fin = []
+
+                if caminhos_fin:
+                    st.write("**📸 Fotos do Veículo Finalizado:**")
+                    cols_hf = st.columns(3)
+                    for idx_f, p_foto in enumerate(caminhos_fin):
+                        if os.path.exists(p_foto):
+                            with cols_hf[idx_f % 3]:
+                                st.image(
+                                    p_foto,
+                                    caption=f"Finalizado {idx_f + 1}",
+                                    use_container_width=True,
+                                )
+    else:
+        st.info("Nenhum histórico de atendimento encontrado.")
