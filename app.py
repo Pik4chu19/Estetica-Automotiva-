@@ -49,6 +49,7 @@ def init_db():
             endereco_empresa TEXT,
             telefone_empresa TEXT,
             responsavel_empresa TEXT,
+            logo_path TEXT,
             proprietario TEXT,
             telefone_cliente TEXT,
             veiculo TEXT,
@@ -108,7 +109,7 @@ def buscar_veiculos_cliente(cliente_id):
     return rows
 
 
-def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
+def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria, logo_file):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
@@ -131,6 +132,11 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
     conn.close()
 
     timestamp_pasta = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    logo_path = ""
+    if logo_file:
+        logo_path = salvar_foto_disco(logo_file, f"{timestamp_pasta}_logo")
+
     caminhos_vistoria = []
     if arquivos_vistoria:
         for f in arquivos_vistoria:
@@ -143,10 +149,10 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
     cursor.execute(
         """
         INSERT INTO atendimentos (
-            cliente_id, data_atendimento, nome_estabelecimento, endereco_empresa, telefone_empresa, responsavel_empresa,
+            cliente_id, data_atendimento, nome_estabelecimento, endereco_empresa, telefone_empresa, responsavel_empresa, logo_path,
             proprietario, telefone_cliente, veiculo, cor, ano, observacoes_vistoria,
             fotos_vistoria, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             cliente_id,
@@ -155,6 +161,7 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria):
             dados.get("endereco_empresa", ""),
             dados.get("telefone_empresa", ""),
             dados.get("responsavel_empresa", ""),
+            logo_path,
             dados.get("proprietario", ""),
             dados.get("telefone", ""),
             dados.get("veiculo", ""),
@@ -254,6 +261,7 @@ def gerar_pdf_relatorio(reg):
         end_est,
         tel_est,
         resp_est,
+        logo_path,
         prop,
         tel_cli,
         veic,
@@ -291,6 +299,14 @@ def gerar_pdf_relatorio(reg):
         textColor=colors.HexColor("#1A365D"),
     )
 
+    sub_info_style = ParagraphStyle(
+        name="PDFSubInfo",
+        parent=title_style,
+        fontSize=9,
+        leading=13,
+        textColor=colors.HexColor("#4A5568"),
+    )
+
     subtitle_style = ParagraphStyle(
         name="PDFSubTitle",
         parent=styles["Heading2"],
@@ -301,25 +317,48 @@ def gerar_pdf_relatorio(reg):
         spaceAfter=5,
     )
 
-    sub_info_style = ParagraphStyle(
-        name="PDFSubInfo",
-        parent=title_style,
-        fontSize=9,
-        leading=13,
-        textColor=colors.HexColor("#4A5568"),
-    )
-
     empresa_txt = nome_est if nome_est else "X-treme Parts"
-    story.append(Paragraph(f"<b>{empresa_txt}</b>", title_style))
+    texto_empresa_elements = [Paragraph(f"<b>{empresa_txt}</b>", title_style)]
 
     if end_est:
-        story.append(Paragraph(f"<b>Endereço:</b> {end_est}", sub_info_style))
+        texto_empresa_elements.append(
+            Paragraph(f"<b>Endereço:</b> {end_est}", sub_info_style)
+        )
     if tel_est:
-        story.append(Paragraph(f"<b>Telefone:</b> {tel_est}", sub_info_style))
+        texto_empresa_elements.append(
+            Paragraph(f"<b>Telefone:</b> {tel_est}", sub_info_style)
+        )
     if resp_est:
-        story.append(
+        texto_empresa_elements.append(
             Paragraph(f"<b>Responsável:</b> {resp_est}", sub_info_style)
         )
+
+    header_table_data = []
+    logo_img = ""
+    if logo_path and os.path.exists(logo_path):
+        try:
+            img = PILImage.open(logo_path)
+            img_io = io.BytesIO()
+            img.convert("RGB").save(img_io, format="JPEG", quality=80)
+            img_io.seek(0)
+            logo_img = RLImage(img_io, width=70, height=70)
+        except Exception:
+            logo_img = ""
+
+    if logo_img:
+        header_table_data.append([logo_img, texto_empresa_elements])
+        t_header = Table(header_table_data, colWidths=[80, 460])
+        t_header.setStyle(
+            TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ])
+        )
+        story.append(t_header)
+    else:
+        for el in texto_empresa_elements:
+            story.append(el)
 
     story.append(Spacer(1, 15))
 
@@ -532,7 +571,7 @@ if opcao_menu == "📝 Novo Cadastro / Vistoria":
                 "observacoes_vistoria": observacoes_vistoria,
             }
             novo_id = cadastrar_cliente_e_veiculo(
-                dados_cadastro, fotos_vistoria
+                dados_cadastro, fotos_vistoria, logo_empresa
             )
             st.success(
                 f"✅ Cadastro realizado com sucesso! (ID do Atendimento: #{novo_id})"
@@ -582,6 +621,7 @@ elif opcao_menu == "🚗 Abrir Atendimento (Veículo Existente)":
                     end_est,
                     tel_est,
                     resp_est,
+                    logo_p,
                     prop,
                     tel_cli,
                     veic,
@@ -640,258 +680,4 @@ elif opcao_menu == "🚗 Abrir Atendimento (Veículo Existente)":
 
                     with col_acao:
                         if idx == st.session_state.etapa_atual:
-                            if st.button(f"Concluir: {etapa}", key=f"etp_{idx}"):
-                                st.session_state.etapa_atual += 1
-                                st.rerun()
-
-                observacoes_finais = ""
-                valor_final = val_fin or 0.0
-                chave_pix = pix or ""
-                fotos_finalizacao = []
-
-                if st.session_state.etapa_atual == len(etapas):
-                    st.divider()
-                    st.subheader("✨ 6. Finalização e Entrega")
-
-                    col_v1, col_v2, col_v3 = st.columns(3)
-                    with col_v1:
-                        valor_final = st.number_input(
-                            "💰 Valor Total dos Serviços (R$):",
-                            min_value=0.0,
-                            value=float(val_fin or 0.0),
-                            format="%.2f",
-                            step=10.0,
-                        )
-                    with col_v2:
-                        chave_pix = st.text_input(
-                            "🔑 Chave Pix para Pagamento:",
-                            value=pix or "",
-                            placeholder="Ex: CPF, CNPJ, Telefone ou E-mail",
-                        )
-                    with col_v3:
-                        observacoes_finais = st.text_area(
-                            "📝 Observações Finais / Recomendações:",
-                            value=obs_fin or "",
-                            placeholder="Ex: Não lavar o veículo pelas próximas 48h.",
-                        )
-
-                    st.subheader("📸 Fotos do Veículo Finalizado")
-                    fotos_finalizacao = st.file_uploader(
-                        "Anexe as fotos do veículo pronto/entregue:",
-                        type=["png", "jpg", "jpeg"],
-                        accept_multiple_files=True,
-                        key="finalizacao_existente",
-                    )
-
-                if tel_cli and veic:
-                    st.divider()
-                    st.subheader("📲 Notificar Cliente via WhatsApp")
-
-                    etapa_nome = (
-                        etapas[st.session_state.etapa_atual - 1]
-                        if st.session_state.etapa_atual > 0
-                        else "Cadastro Inicial"
-                    )
-
-                    texto_detalhes = ""
-                    if etapa_nome == "Vistoria Concluída":
-                        if obs_vist:
-                            texto_detalhes += f"\n\n📌 *Vistoria:* {obs_vist}"
-                        if servicos_acertados:
-                            texto_detalhes += (
-                                f"\n🛠️ *Serviços Acertados:* {servicos_acertados}"
-                            )
-
-                    elif st.session_state.etapa_atual == len(etapas):
-                        if observacoes_finais:
-                            texto_detalhes += (
-                                f"\n\n📝 *Observações Finais:* {observacoes_finais}"
-                            )
-                        if valor_final > 0:
-                            texto_detalhes += (
-                                f"\n💰 *Valor Total:* R$ {valor_final:.2f}"
-                            )
-                        if chave_pix:
-                            texto_detalhes += f"\n🔑 *Chave Pix:* {chave_pix}"
-
-                        texto_detalhes += (
-                            "\n\n✨ *\"Cuidamos hoje do bem que um dia foi seu maior sonho, "
-                            "porque aquilo que conquistamos merece ser preservado nos mínimos detalhes.\"*"
-                        )
-
-                    cabecalho_empresa = (
-                        f"*{nome_est}*\n" if nome_est else ""
-                    )
-
-                    mensagem = (
-                        f"{cabecalho_empresa}"
-                        f"Olá {prop}! 👋\n\n"
-                        f"Atualização sobre o seu veículo *{veic}* ({cor_v} - {ano_v}):\n"
-                        f"Status: *{etapa_nome}*{texto_detalhes}\n\n"
-                        f"Qualquer dúvida, estamos à disposição!"
-                    )
-
-                    link_wa = gerar_link_whatsapp(tel_cli, mensagem)
-
-                    st.markdown(
-                        f'<a href="{link_wa}" target="_blank">'
-                        f'<button style="background-color:#25D366; color:white; border:none; padding:12px 24px; border-radius:8px; cursor:pointer; font-weight:bold; font-size:16px;">'
-                        f"Enviar Status via WhatsApp 🚀"
-                        f"</button></a>",
-                        unsafe_allow_html=True,
-                    )
-
-                st.divider()
-                st.subheader("💾 Salvar e Gerar Relatório")
-
-                col_b1, col_b2 = st.columns(2)
-
-                with col_b1:
-                    if st.button("💾 Concluir e Atualizar Atendimento"):
-                        dados_atualizacao = {
-                            "servicos_acertados": servicos_acertados,
-                            "observacoes_finais": observacoes_finais,
-                            "valor_final": valor_final,
-                            "chave_pix": chave_pix,
-                        }
-                        atualizar_atendimento_db(
-                            atendimento_id_sel,
-                            dados_atualizacao,
-                            fotos_finalizacao,
-                        )
-                        st.success(
-                            "✅ Atendimento atualizado e salvo com sucesso!"
-                        )
-                        st.rerun()
-
-                with col_b2:
-                    try:
-                        pdf_file = gerar_pdf_relatorio(reg)
-                        st.download_button(
-                            label="📥 Baixar PDF para Enviar ao Cliente",
-                            data=pdf_file,
-                            file_name=f"relatorio_{veic or 'veiculo'}.pdf",
-                            mime="application/pdf",
-                        )
-                    except Exception as e:
-                        st.error(f"Erro ao gerar PDF: {e}")
-        else:
-            st.warning("Este cliente ainda não possui veículos cadastrados.")
-    else:
-        st.info(
-            "Nenhum cliente cadastrado ainda. Vá em 'Novo Cadastro / Vistoria' primeiro."
-        )
-
-# ==========================================
-# ABA 3: HISTÓRICO DE ATENDIMENTO
-# ==========================================
-elif opcao_menu == "📂 Histórico de Atendimento":
-    st.title("📂 Histórico de Atendimentos")
-
-    termo_busca = st.text_input(
-        "🔍 Buscar por Proprietário(a), Veículo ou Telefone:",
-        placeholder="Digite o nome ou modelo do carro...",
-    )
-
-    registros = buscar_atendimentos(termo_busca)
-
-    if registros:
-        st.write(f"**Total de registros encontrados:** {len(registros)}")
-
-        for reg in registros:
-            (
-                reg_id,
-                cli_id,
-                data_atend,
-                nome_est,
-                end_est,
-                tel_est,
-                resp_est,
-                prop,
-                tel_cli,
-                veic,
-                cor_v,
-                ano_v,
-                obs_vist,
-                serv_acert,
-                obs_fin,
-                val_fin,
-                pix,
-                f_vist_json,
-                f_fin_json,
-                status,
-            ) = reg
-
-            status_tag = "🟡 Em Aberto" if status == "Em Aberto" else "✅ Concluído"
-
-            with st.expander(
-                f"{status_tag} | 🚗 {veic or 'Veículo'} - {prop or 'Cliente'} ({data_atend})"
-            ):
-                col_h1, col_h2 = st.columns(2)
-                with col_h1:
-                    st.write(f"**Proprietário(a):** {prop or '-'}")
-                    st.write(f"**Telefone:** {tel_cli or '-'}")
-                    st.write(f"**Veículo:** {veic or '-'}")
-                    st.write(f"**Cor / Ano:** {cor_v or '-'} / {ano_v or '-'}")
-                with col_h2:
-                    st.write(f"**Valor Total:** R$ {val_fin or 0.0:.2f}")
-                    st.write(f"**Chave Pix:** {pix or '-'}")
-                    st.write(f"**Responsável:** {resp_est or '-'}")
-
-                if serv_acert:
-                    st.write(f"**Serviços Executados:**\n{serv_acert}")
-                if obs_vist:
-                    st.write(f"**Observações de Vistoria:**\n{obs_vist}")
-                if obs_fin:
-                    st.write(f"**Observações Finais:**\n{obs_fin}")
-
-                # Fotos Vistoria
-                try:
-                    caminhos_vist = json.loads(f_vist_json) if f_vist_json else []
-                except Exception:
-                    caminhos_vist = []
-
-                if caminhos_vist:
-                    st.write("**📸 Fotos da Vistoria Inicial:**")
-                    cols_hv = st.columns(3)
-                    for idx_f, p_foto in enumerate(caminhos_vist):
-                        if os.path.exists(p_foto):
-                            with cols_hv[idx_f % 3]:
-                                st.image(
-                                    p_foto,
-                                    caption=f"Vistoria {idx_f + 1}",
-                                    use_container_width=True,
-                                )
-
-                # Fotos Finalização
-                try:
-                    caminhos_fin = json.loads(f_fin_json) if f_fin_json else []
-                except Exception:
-                    caminhos_fin = []
-
-                if caminhos_fin:
-                    st.write("**📸 Fotos do Veículo Finalizado:**")
-                    cols_hf = st.columns(3)
-                    for idx_f, p_foto in enumerate(caminhos_fin):
-                        if os.path.exists(p_foto):
-                            with cols_hf[idx_f % 3]:
-                                st.image(
-                                    p_foto,
-                                    caption=f"Finalizado {idx_f + 1}",
-                                    use_container_width=True,
-                                )
-
-                st.divider()
-                try:
-                    pdf_file_hist = gerar_pdf_relatorio(reg)
-                    st.download_button(
-                        label=f"📥 Baixar PDF deste Atendimento (#{reg_id})",
-                        data=pdf_file_hist,
-                        file_name=f"relatorio_atendimento_{reg_id}_{veic or 'veiculo'}.pdf",
-                        mime="application/pdf",
-                        key=f"dl_hist_{reg_id}",
-                    )
-                except Exception as e:
-                    st.error(f"Erro ao gerar PDF: {e}")
-    else:
-        st.info("Nenhum histórico de atendimento encontrado.")
+                            if st.button(f"Concluir: {etapa}", key=f"
