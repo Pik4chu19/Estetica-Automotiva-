@@ -350,7 +350,7 @@ def gerar_pdf():
     story.append(Spacer(1, 10))
 
     if servicos_acertados:
-        story.append(Paragraph("Serviços Acertados", subtitle_style))
+        story.append(Paragraph("Serviços contratados", subtitle_style))
         story.append(Paragraph(servicos_acertados, body_style))
         story.append(Spacer(1, 10))
 
