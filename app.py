@@ -32,13 +32,9 @@ def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS clientes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT,
-            telefone TEXT
-        )
-    """)
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS clientes (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, telefone TEXT)"
+    )
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS atendimentos (
@@ -152,4 +148,259 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria, logo_file):
             cliente_id, data_atendimento, nome_estabelecimento, endereco_empresa, telefone_empresa, responsavel_empresa, logo_path,
             proprietario, telefone_cliente, veiculo, cor, ano, observacoes_vistoria,
             fotos_vistoria, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """,
+        (
+            cliente_id,
+            datetime.now().strftime("%d/%m/%Y %H:%M"),
+            dados.get("nome_estabelecimento", ""),
+            dados.get("endereco_empresa", ""),
+            dados.get("telefone_empresa", ""),
+            dados.get("responsavel_empresa", ""),
+            logo_path,
+            dados.get("proprietario", ""),
+            dados.get("telefone", ""),
+            dados.get("veiculo", ""),
+            dados.get("cor", ""),
+            dados.get("ano", ""),
+            dados.get("observacoes_vistoria", ""),
+            json.dumps(caminhos_vistoria),
+            "Em Aberto",
+        ),
+    )
+    atendimento_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return atendimento_id
+
+
+def atualizar_atendimento_db(
+    atendimento_id, dados, arquivos_finalizacao_novos
+):
+    timestamp_pasta = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT fotos_finalizacao FROM atendimentos WHERE id = ?",
+        (atendimento_id,),
+    )
+    res = cursor.fetchone()
+    caminhos_finalizacao = json.loads(res[0]) if res and res[0] else []
+
+    if arquivos_finalizacao_novos:
+        for f in arquivos_finalizacao_novos:
+            caminhos_finalizacao.append(
+                salvar_foto_disco(f, f"{timestamp_pasta}_finalizacao")
+            )
+
+    cursor.execute(
+        """
+        UPDATE atendimentos SET
+            servicos_acertados = ?,
+            observacoes_finais = ?,
+            valor_final = ?,
+            chave_pix = ?,
+            fotos_finalizacao = ?,
+            status = ?
+        WHERE id = ?
+    """,
+        (
+            dados.get("servicos_acertados", ""),
+            dados.get("observacoes_finais", ""),
+            dados.get("valor_final", 0.0),
+            dados.get("chave_pix", ""),
+            json.dumps(caminhos_finalizacao),
+            "Concluído",
+            atendimento_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def buscar_atendimentos(termo=""):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    if termo:
+        query = "%" + termo + "%"
+        cursor.execute(
+            """
+            SELECT * FROM atendimentos 
+            WHERE proprietario LIKE ? OR veiculo LIKE ? OR telefone_cliente LIKE ?
+            ORDER BY id DESC
+        """,
+            (query, query, query),
+        )
+    else:
+        cursor.execute("SELECT * FROM atendimentos ORDER BY id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def carregar_atendimento_por_id(atendimento_id):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM atendimentos WHERE id = ?", (atendimento_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def gerar_pdf_relatorio(reg):
+    (
+        reg_id,
+        cli_id,
+        data_atend,
+        nome_est,
+        end_est,
+        tel_est,
+        resp_est,
+        logo_path,
+        prop,
+        tel_cli,
+        veic,
+        cor_v,
+        ano_v,
+        obs_vist,
+        serv_acert,
+        obs_fin,
+        val_fin,
+        pix,
+        f_vist_json,
+        f_fin_json,
+        status_atend,
+    ) = reg
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
+    story = []
+
+    styles = getSampleStyleSheet()
+    body_style = styles["BodyText"]
+
+    title_style = ParagraphStyle(
+        name="PDFTitle",
+        parent=styles["Heading1"],
+        fontSize=16,
+        leading=20,
+        textColor=colors.HexColor("#1A365D"),
+    )
+
+    sub_info_style = ParagraphStyle(
+        name="PDFSubInfo",
+        parent=title_style,
+        fontSize=9,
+        leading=13,
+        textColor=colors.HexColor("#4A5568"),
+    )
+
+    subtitle_style = ParagraphStyle(
+        name="PDFSubTitle",
+        parent=styles["Heading2"],
+        fontSize=12,
+        leading=16,
+        textColor=colors.HexColor("#2B6CB0"),
+        spaceBefore=10,
+        spaceAfter=5,
+    )
+
+    empresa_txt = nome_est if nome_est else "X-treme Parts"
+    texto_empresa_elements = [Paragraph(f"<b>{empresa_txt}</b>", title_style)]
+
+    if end_est:
+        texto_empresa_elements.append(
+            Paragraph(f"<b>Endereço:</b> {end_est}", sub_info_style)
+        )
+    if tel_est:
+        texto_empresa_elements.append(
+            Paragraph(f"<b>Telefone:</b> {tel_est}", sub_info_style)
+        )
+    if resp_est:
+        texto_empresa_elements.append(
+            Paragraph(f"<b>Responsável:</b> {resp_est}", sub_info_style)
+        )
+
+    header_table_data = []
+    logo_img = ""
+    if logo_path and os.path.exists(logo_path):
+        try:
+            img = PILImage.open(logo_path)
+            img_io = io.BytesIO()
+            img.convert("RGB").save(img_io, format="JPEG", quality=80)
+            img_io.seek(0)
+            logo_img = RLImage(img_io, width=70, height=70)
+        except Exception:
+            logo_img = ""
+
+    if logo_img:
+        header_table_data.append([logo_img, texto_empresa_elements])
+        t_header = Table(header_table_data, colWidths=[80, 460])
+        t_header.setStyle(
+            TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ])
+        )
+        story.append(t_header)
+    else:
+        for el in texto_empresa_elements:
+            story.append(el)
+
+    story.append(Spacer(1, 15))
+
+    dados_veiculo = [
+        [
+            Paragraph("<b>Proprietário(a):</b>", body_style),
+            Paragraph(prop or "-", body_style),
+            Paragraph("<b>Telefone:</b>", body_style),
+            Paragraph(tel_cli or "-", body_style),
+        ],
+        [
+            Paragraph("<b>Veículo:</b>", body_style),
+            Paragraph(veic or "-", body_style),
+            Paragraph("<b>Cor / Ano:</b>", body_style),
+            Paragraph(f"{cor_v or '-'} / {ano_v or '-'}", body_style),
+        ],
+        [
+            Paragraph("<b>Data Atendimento:</b>", body_style),
+            Paragraph(data_atend or "-", body_style),
+            Paragraph("<b>Status:</b>", body_style),
+            Paragraph(status_atend or "-", body_style),
+        ],
+    ]
+    tabela = Table(dados_veiculo, colWidths=[100, 170, 90, 180])
+    tabela.setStyle(
+        TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F7FAFC")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("PADDING", (0, 0), (-1, -1), 6),
+        ])
+    )
+    story.append(tabela)
+    story.append(Spacer(1, 10))
+
+    if serv_acert:
+        story.append(Paragraph("Serviços Acertados", subtitle_style))
+        story.append(Paragraph(serv_acert, body_style))
+        story.append(Spacer(1, 10))
+
+    if obs_vist:
+        story.append(Paragraph("Observações da Vistoria", subtitle_style))
+        story.append(Paragraph(obs_vist, body_style))
+        story.append(Spacer(1, 10))
+
+    if obs_fin or (val_fin and val_fin > 0) or pix:
+        story.append(Paragraph("Finalização do Serviço", subtitle_style))
+        if obs_fin:
+            story.append(
+                Paragraph(f"<b>Observações Finais:</b> {obs_fin
