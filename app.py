@@ -240,6 +240,12 @@ def gerar_pdf():
         spaceBefore=10,
         spaceAfter=5,
     )
+    sub_info_style = ParagraphStyle(
+        "SubInfoStyle",
+        parent=title_style,
+        fontSize=11,
+        textColor=colors.gray,
+    )
     body_style = styles["BodyText"]
 
     empresa_txt = (
@@ -250,8 +256,19 @@ def gerar_pdf():
 
     header_text = [
         Paragraph(f"<b>{empresa_txt}</b>", title_style),
-        Paragraph(
-            "Relatório de Serviço e Vistoria",
-            ParagraphStyle(
-                "Sub",
-                parent=
+        Paragraph("Relatório de Serviço e Vistoria", sub_info_style),
+    ]
+
+    if logo_empresa:
+        img_logo = Image.open(logo_empresa)
+        img_io_logo = io.BytesIO()
+        img_logo.convert("RGB").save(img_io_logo, format="JPEG", quality=85)
+        img_io_logo.seek(0)
+        rl_logo = RLImage(img_io_logo, width=100, height=60)
+
+        tabela_header = Table(
+            [[rl_logo, header_text]],
+            colWidths=[110, 430],
+        )
+        tabela_header.setStyle(
+            
