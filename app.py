@@ -152,4 +152,46 @@ def cadastrar_cliente_e_veiculo(dados, arquivos_vistoria, logo_file):
             cliente_id, data_atendimento, nome_estabelecimento, endereco_empresa, telefone_empresa, responsavel_empresa, logo_path,
             proprietario, telefone_cliente, veiculo, cor, ano, observacoes_vistoria,
             fotos_vistoria, status
-        
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """,
+        (
+            cliente_id,
+            datetime.now().strftime("%d/%m/%Y %H:%M"),
+            dados.get("nome_estabelecimento", ""),
+            dados.get("endereco_empresa", ""),
+            dados.get("telefone_empresa", ""),
+            dados.get("responsavel_empresa", ""),
+            logo_path,
+            dados.get("proprietario", ""),
+            dados.get("telefone", ""),
+            dados.get("veiculo", ""),
+            dados.get("cor", ""),
+            dados.get("ano", ""),
+            dados.get("observacoes_vistoria", ""),
+            json.dumps(caminhos_vistoria),
+            "Em Aberto",
+        ),
+    )
+    atendimento_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return atendimento_id
+
+
+def atualizar_atendimento_db(
+    atendimento_id, dados, arquivos_finalizacao_novos
+):
+    timestamp_pasta = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT fotos_finalizacao FROM atendimentos WHERE id = ?",
+        (atendimento_id,),
+    )
+    res = cursor.fetchone()
+    caminhos_finalizacao = json.loads(res[0]) if res and res[0] else []
+
+    if arquivos_finalizacao_novos:
+        for f in arquivos_finalizacao_novos:
+            caminhos_finalizacao
